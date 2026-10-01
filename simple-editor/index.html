@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Markdown Annotator</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --fg: #1f2328;
+            --muted: #656d76;
+            --line: #d0d7de;
+            --accent: #0969da;
+            --hl: #fff3c4;
+            --hl-strong: #ffd33d;
+            --danger: #cf222e;
+            --ok: #1a7f37;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font: 14px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--fg);
+            background: var(--bg);
+        }
+
+        header {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--line);
+            position: sticky;
+            top: 0;
+            background: #f6f8fa;
+            z-index: 20;
+        }
+
+        header .title {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        header .doc-name {
+            color: var(--muted);
+        }
+
+        button {
+            font: inherit;
+            padding: 4px 10px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f3f4f6;
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        button.primary:hover {
+            filter: brightness(1.08);
+        }
+
+        button.danger {
+            color: var(--danger);
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 380px;
+            gap: 0;
+            align-items: start;
+        }
+
+        #view {
+            padding: 24px 32px 160px;
+            max-width: 900px;
+            outline: none;
+        }
+
+        #view h1,
+        #view h2,
+        #view h3 {
+            border-bottom: 1px solid var(--line);
+            padding-bottom: .2em;
+        }
+
+        #view code {
+            background: #f0f1f3;
+            padding: .15em .35em;
+            border-radius: 4px;
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 92%;
+        }
+
+        #view pre {
+            background: #f6f8fa;
+            padding: 12px;
+            border-radius: 6px;
+            overflow: auto;
+        }
+
+        #view pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .mermaid-figure {
+            margin: 0 0 16px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: #fff;
+        }
+
+        .mermaid-diagram {
+            padding: 12px;
+            overflow: auto;
+            text-align: center;
+        }
+
+        .mermaid-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .mermaid-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            border-top: 1px solid var(--line);
+            background: #f6f8fa;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .mermaid-bar button {
+            padding: 1px 8px;
+            font-size: 12px;
+        }
+
+        .mermaid-figure pre {
+            margin: 0;
+            border-top: 1px solid var(--line);
+            border-radius: 0 0 6px 6px;
+        }
+
+        .mermaid-figure.failed .mermaid-diagram {
+            color: var(--danger);
+            text-align: left;
+            font-size: 12px;
+        }
+
+        #view blockquote {
+            margin: 0 0 16px;
+            padding: 0 1em;
+            color: var(--muted);
+            border-left: .25em solid var(--line);
+        }
+
+        #view table {
+            border-collapse: collapse;
+            margin: 0 0 16px;
+            display: block;
+            width: max-content;
+            max-width: 100%;
+            overflow: auto;
+        }
+
+        #view th,
+        #view td {
+            border: 1px solid var(--line);
+            padding: 6px 13px;
+        }
+
+        #view th {
+            background: #f6f8fa;
+        }
+
+        #view tbody tr:nth-child(2n) {
+            background: #f6f8fa;
+        }
+
+        #view hr {
+            border: 0;
+            border-top: 1px solid var(--line);
+        }
+
+        aside {
+            border-left: 1px solid var(--line);
+            height: calc(100vh - 49px);
+            position: sticky;
+            top: 49px;
+            overflow: auto;
+            padding: 12px;
+            background: #fcfcfd;
+        }
+
+        .side-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .card.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(9, 105, 218, .15);
+        }
+
+        .card.deleted {
+            opacity: .5;
+        }
+
+        .card .row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 0 7px;
+            color: var(--muted);
+        }
+
+        .badge.op-comment {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .badge.op-delete {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .badge.op-add {
+            color: var(--ok);
+            border-color: var(--ok);
+        }
+
+        .badge.op-reword {
+            color: #9a6700;
+            border-color: #9a6700;
+        }
+
+        .badge.state-unmatched {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .quote {
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 12px;
+            background: #f6f8fa;
+            border-radius: 4px;
+            padding: 4px 6px;
+            margin: 6px 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 90px;
+            overflow: auto;
+        }
+
+        .quote.value {
+            background: #eaf5ec;
+        }
+
+        .meta {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        mark.hl {
+            background: var(--hl);
+            border-bottom: 2px solid var(--hl-strong);
+            cursor: pointer;
+        }
+
+        mark.hl.active {
+            background: var(--hl-strong);
+        }
+
+        mark.hl.op-delete {
+            text-decoration: line-through;
+        }
+
+        mark.hl.unmatched {
+            background: #ffe3e3;
+            border-bottom-color: var(--danger);
+        }
+
+        #bubble {
+            position: absolute;
+            display: none;
+            gap: 4px;
+            padding: 4px;
+            background: #24292f;
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+            z-index: 30;
+        }
+
+        #bubble button {
+            background: transparent;
+            border: 0;
+            color: #fff;
+            padding: 3px 8px;
+        }
+
+        #bubble button:hover {
+            background: rgba(255, 255, 255, .15);
+        }
+
+        #form {
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+
+        #form[hidden] {
+            display: none;
+        }
+
+        #form textarea {
+            width: 100%;
+            font: inherit;
+            padding: 6px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            resize: vertical;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            color: var(--muted);
+            margin: 6px 0 2px;
+        }
+
+        .empty {
+            color: var(--muted);
+            font-style: italic;
+            padding: 8px 2px;
+        }
+
+        #status {
+            margin-left: auto;
+            color: var(--muted);
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <span class="title">Markdown Annotator</span>
+        <span class="doc-name" id="docName">sample.md</span>
+        <button id="btnOpenMd">Open .md</button>
+        <button id="btnOpenSidecar">Open .annotations</button>
+        <button id="btnSaveMd" class="primary">Save .md (embedded)</button>
+        <button id="btnSaveSidecar">Save .annotations</button>
+        <button id="btnClearStore">Reset storage</button>
+        <label style="margin:0"><input type="checkbox" id="showDeleted"> show deleted</label>
+        <span id="status"></span>
+        <input type="file" id="fileMd" accept=".md,.mdx,text/markdown" hidden>
+        <input type="file" id="fileSidecar" accept=".annotations,.json,application/json" hidden>
+    </header>
+
+    <main>
+        <article id="view"></article>
+        <aside>
+            <div class="side-head">
+                <strong>Annotations (<span id="count">0</span>)</strong>
+                <span class="meta" id="schemaInfo">1.0.0</span>
+            </div>
+            <div id="form" hidden></div>
+            <div id="list"></div>
+        </aside>
+    </main>
+
+    <div id="bubble">
+        <button data-op="comment">Comment</button>
+        <button data-op="reword">Reword</button>
+        <button data-op="add">Add</button>
+        <button data-op="delete">Delete</button>
+    </div>
+
+    <script type="text/markdown" id="sampleDoc">
+# Release Notes: Annotation Extension
+
+The annotation extension associates a Markdown document with one JSON payload.
+It supports **embedded** blocks and *sidecar* files.
+
+## Goals
+
+- Keep review requests next to the content they describe.
+- Survive edits through prefix and suffix anchors.
+- Never silently discard an entry, because the payload is append-only.
+
+## Usage
+
+Select any text in this rendered view and choose an operation from the popup.
+Use `Save .md (embedded)` to download the document with the payload appended,
+or `Save .annotations` to download a sidecar file.
+
+> Annotations are stored as source offsets, not DOM positions, so they can be
+> resolved again after the document has changed.
+
+## Workflow
+
+```mermaid
+flowchart LR
+  Doc[Markdown document] --> View[Rendered view]
+  View -->|Select text| Entry[Annotation entry]
+  Entry --> Payload[JSON payload]
+  Payload -->|Embedded block| Doc
+  Payload -->|Sidecar| File[document.md.annotations]
+```
+
+## Operations
+
+| Operation | Kind | Requires | Modifies the document |
+| --- | --- | :---: | ---: |
+| `comment` | comment | `comment` | no |
+| `delete` | text-edit | `selection` | yes |
+| `add` | text-edit | `selection`, `value` | yes |
+| `reword` | text-edit | `selection`, `value` | yes |
+
+## Known issues
+
+The resolution algorithm currently reports a fuzzy match without asking for
+confirmation. This will be adressed in the next release.
+</script>
+
+    <script src="lib/mermaid.min.js"></script>
+    <script>
+        'use strict';
+
+        const SCHEMA_URL = 'https://base.bmwgroup.net/schema/document-comments.json';
+        const SCHEMA_VERSION = '1.0.0';
+        const CTX = 96;              // characters of prefix/suffix context captured per entry
+        const FUZZY_THRESHOLD = 0.8;
+        const STORE_KEY = 'markdown-annotator:v1';
+
+        const el = {
+            view: document.getElementById('view'),
+            list: document.getElementById('list'),
+            form: document.getElementById('form'),
+            bubble: document.getElementById('bubble'),
+            count: document.getElementById('count'),
+            docName: document.getElementById('docName'),
+            status: document.getElementById('status'),
+            showDeleted: document.getElementById('showDeleted')
+        };
+
+        const state = {
+            docName: 'sample.md',
+            body: '',            // markdown source without the embedded annotation block
+            payload: null,
+            headings: [],
+            spans: [],
+            spanText: new Map(),
+            resolved: new Map(), // entryId -> {start, end, confidence}
+            activeId: null,
+            pending: null        // {operation, start, end}
+        };
+
+        /* ---------------------------------------------------------------- utils */
+
+        const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+            : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            }));
+
+        const nowIso = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+        const escapeHtml = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+        function setStatus(msg, isError) {
+            el.status.textContent = msg || '';
+            el.status.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+            if (msg) setTimeout(() => { if (el.status.textContent === msg) el.status.textContent = ''; }, 6000);
+        }
+
+        /* ------------------------------------------------- embedded block (§4.2) */
+
+        const EMBEDDED_RE = /\n[ \t]*-{3}[ \t]*\r?\n\s*```json:annotation[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*\s*$/;
+
+        function splitDocument(text) {
+            const src = text.replace(/\r\n/g, '\n');
+            const m = EMBEDDED_RE.exec(src);
+            if (!m) return { body: src, raw: null };
+            return { body: src.slice(0, m.index), raw: m[1] };
+        }
+
+        function buildDocument(body, payload) {
+            const json = JSON.stringify(payload, null, 2);
+            return body.replace(/\s*$/, '') + '\n\n---\n```json:annotation\n' + json + '\n```\n';
+        }
+
+        function emptyPayload() {
+            const ts = nowIso();
+            return { $schema: SCHEMA_URL, schemaVersion: SCHEMA_VERSION, createdAt: ts, updatedAt: ts, entries: [] };
+        }
+
+        function validatePayload(obj) {
+            const errors = [];
+            if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return ['payload is not a JSON object'];
+            if (obj.schemaVersion !== SCHEMA_VERSION) errors.push('unsupported schemaVersion: ' + obj.schemaVersion);
+            if (!Array.isArray(obj.entries)) errors.push('entries must be an array');
+            (obj.entries || []).forEach((e, i) => {
+                if (!e.id || !e.kind || !e.operation || !e.section || !Array.isArray(e.events) || !e.events.length)
+                    errors.push('entry ' + i + ' is missing required properties');
+                if (e.operation === 'comment' && !e.comment) errors.push('entry ' + i + ' requires comment');
+                if (['delete', 'add', 'reword'].includes(e.operation) && !(e.selection && e.selection.text))
+                    errors.push('entry ' + i + ' requires selection.text');
+                if (['add', 'reword'].includes(e.operation) && typeof e.value !== 'string')
+                    errors.push('entry ' + i + ' requires value');
+            });
+            return errors;
+        }
+
+        /* ------------------------------------------------------ markdown render */
+
+        const INLINE_RE = new RegExp([
+            '(`+)([\\s\\S]*?)\\1',
+            '\\*\\*([\\s\\S]+?)\\*\\*',
+            '__([\\s\\S]+?)__',
+            '~~([\\s\\S]+?)~~',
+            '\\*([^*\\n][\\s\\S]*?)\\*',
+            '(?<![A-Za-z0-9_])_([^_\\n][\\s\\S]*?)_(?![A-Za-z0-9_])',
+            '(!?)\\[([^\\]]*)\\]\\(([^)\\s]*)(?:\\s+"[^"]*")?\\)'
+        ].join('|'), 'g');
+
+        function textRun(src, start, end) {
+            if (end <= start) return '';
+            return '<span data-s="' + start + '">' + escapeHtml(src.slice(start, end)) + '</span>';
+        }
+
+        // Renders inline markup for src.slice(start, end); every literal text run keeps its source offset.
+        function inline(src, start, end) {
+            let out = '', pos = start;
+            const chunk = src.slice(start, end);
+            INLINE_RE.lastIndex = 0;
+            let m;
+            while ((m = INLINE_RE.exec(chunk)) !== null) {
+                const at = start + m.index, after = at + m[0].length;
+                out += textRun(src, pos, at);
+                if (m[1] !== undefined) {                       // code span
+                    const s = at + m[1].length;
+                    out += '<code>' + textRun(src, s, s + m[2].length) + '</code>';
+                } else if (m[3] !== undefined) {
+                    out += '<strong>' + inline(src, at + 2, after - 2) + '</strong>';
+                } else if (m[4] !== undefined) {
+                    out += '<strong>' + inline(src, at + 2, after - 2) + '</strong>';
+                } else if (m[5] !== undefined) {
+                    out += '<del>' + inline(src, at + 2, after - 2) + '</del>';
+                } else if (m[6] !== undefined || m[7] !== undefined) {
+                    out += '<em>' + inline(src, at + 1, after - 1) + '</em>';
+                } else {                                        // link or image
+                    const bang = m[8] === '!';
+                    const labelStart = at + (bang ? 2 : 1);
+                    const href = m[10] || '';
+                    const safe = /^(https?:|mailto:|#|\/|\.)/i.test(href) ? href : '#';
+                    if (bang) {
+                        out += '<em>' + textRun(src, labelStart, labelStart + m[9].length) + '</em>';
+                    } else {
+                        out += '<a href="' + escapeHtml(safe) + '" rel="noopener noreferrer" target="_blank">'
+                            + inline(src, labelStart, labelStart + m[9].length) + '</a>';
+                    }
+                }
+                pos = after;
+                INLINE_RE.lastIndex = after - start;
+            }
+            out += textRun(src, pos, end);
+            return out;
+        }
+
+        function renderMarkdown(src) {
+            const lines = [];
+            let off = 0;
+            src.split('\n').forEach(text => { lines.push({ text, start: off }); off += text.length + 1; });
+
+            const html = [], headings = [];
+            let i = 0;
+            const lineEnd = l => l.start + l.text.length;
+
+            const DELIM_RE = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
+            const isTableStart = idx => idx + 1 < lines.length
+                && lines[idx].text.includes('|')
+                && lines[idx + 1].text.includes('-')
+                && DELIM_RE.test(lines[idx + 1].text)
+                && lines[idx + 1].text.includes('|');
+
+            // Splits a pipe-table row into cell ranges, keeping absolute source offsets.
+            function rowCells(line) {
+                const t = line.text;
+                const bounds = [];
+                let start = 0;
+                for (let k = 0; k < t.length; k++) {
+                    if (t[k] === '\\') { k++; continue; }
+                    if (t[k] === '|') { bounds.push([start, k]); start = k + 1; }
+                }
+                bounds.push([start, t.length]);
+                if (bounds.length > 1 && !t.slice(bounds[0][0], bounds[0][1]).trim()) bounds.shift();
+                const last = bounds[bounds.length - 1];
+                if (bounds.length > 1 && !t.slice(last[0], last[1]).trim()) bounds.pop();
+                return bounds.map(([s, e]) => {
+                    let a = s, b = e;
+                    while (a < b && /\s/.test(t[a])) a++;
+                    while (b > a && /\s/.test(t[b - 1])) b--;
+                    return { start: line.start + a, end: line.start + b };
+                });
+            }
+
+            while (i < lines.length) {
+                const line = lines[i];
+                const t = line.text;
+                let m;
+
+                if (!t.trim()) { i++; continue; }
+
+                if ((m = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(t))) {          // fenced code
+                    const fence = m[1][0].repeat(3);
+                    const lang = m[2].trim().split(/\s+/)[0];
+                    i++;
+                    const bodyStart = i < lines.length ? lines[i].start : lineEnd(line);
+                    let bodyEnd = bodyStart;
+                    const closeRe = new RegExp('^ {0,3}' + fence + '+[ \\t]*$');
+                    while (i < lines.length && !closeRe.test(lines[i].text)) { bodyEnd = lineEnd(lines[i]); i++; }
+                    i++;
+                    const code = '<pre><code class="lang-' + escapeHtml(lang) + '">'
+                        + textRun(src, bodyStart, bodyEnd) + '</code></pre>';
+                    if (lang === 'mermaid') {
+                        html.push('<figure class="mermaid-figure">'
+                            + '<div class="mermaid-diagram">Rendering diagram\u2026</div>'
+                            + '<div class="mermaid-bar"><span>mermaid</span>'
+                            + '<button class="mermaid-toggle" type="button">Show source</button></div>'
+                            + '<div class="mermaid-source" hidden>' + code + '</div></figure>');
+                    } else {
+                        html.push(code);
+                    }
+                    continue;
+                }
+
+                if ((m = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/.exec(t))) {   // ATX heading
+                    const level = m[1].length;
+                    const cs = line.start + t.indexOf(m[2], m[1].length);
+                    headings.push({ level, text: m[2], start: line.start, contentStart: cs, end: src.length });
+                    html.push('<h' + level + ' id="h' + headings.length + '">'
+                        + inline(src, cs, cs + m[2].length) + '</h' + level + '>');
+                    i++;
+                    continue;
+                }
+
+                if (isTableStart(i)) {                                     // GFM pipe table
+                    const aligns = rowCells(lines[i + 1]).map(c => {
+                        const d = src.slice(c.start, c.end);
+                        if (/^:-+:$/.test(d)) return ' style="text-align:center"';
+                        if (/^-+:$/.test(d)) return ' style="text-align:right"';
+                        return '';
+                    });
+                    const cellHtml = (cells, tag) => cells.map((c, n) =>
+                        '<' + tag + (aligns[n] || '') + '>' + inline(src, c.start, c.end) + '</' + tag + '>').join('');
+                    const head = '<tr>' + cellHtml(rowCells(lines[i]), 'th') + '</tr>';
+                    i += 2;
+                    const body = [];
+                    while (i < lines.length && lines[i].text.trim() && lines[i].text.includes('|')) {
+                        body.push('<tr>' + cellHtml(rowCells(lines[i]), 'td') + '</tr>');
+                        i++;
+                    }
+                    html.push('<table><thead>' + head + '</thead><tbody>' + body.join('') + '</tbody></table>');
+                    continue;
+                }
+
+                if (/^ {0,3}([-*_])([ \t]*\1){2,}[ \t]*$/.test(t)) { html.push('<hr>'); i++; continue; }
+
+                if (/^ {0,3}>/.test(t)) {                                  // blockquote
+                    const parts = [];
+                    while (i < lines.length && /^ {0,3}>/.test(lines[i].text)) {
+                        const mm = /^ {0,3}>[ \t]?/.exec(lines[i].text);
+                        const s = lines[i].start + mm[0].length;
+                        parts.push(inline(src, s, lineEnd(lines[i])));
+                        i++;
+                    }
+                    html.push('<blockquote><p>' + parts.join(' ') + '</p></blockquote>');
+                    continue;
+                }
+
+                if ((m = /^ {0,3}([-*+]|\d+[.)])[ \t]+/.exec(t))) {         // list
+                    const ordered = /\d/.test(m[1]);
+                    const items = [];
+                    while (i < lines.length) {
+                        const mm = /^ {0,3}([-*+]|\d+[.)])[ \t]+/.exec(lines[i].text);
+                        if (!mm || /\d/.test(mm[1]) !== ordered) break;
+                        const s = lines[i].start + mm[0].length;
+                        items.push('<li>' + inline(src, s, lineEnd(lines[i])) + '</li>');
+                        i++;
+                    }
+                    html.push('<' + (ordered ? 'ol' : 'ul') + '>' + items.join('') + '</' + (ordered ? 'ol' : 'ul') + '>');
+                    continue;
+                }
+
+                const pStart = line.start;                                 // paragraph
+                let pEnd = lineEnd(line);
+                i++;
+                while (i < lines.length && lines[i].text.trim()
+                    && !/^ {0,3}(#{1,6}[ \t]|>|([-*+]|\d+[.)])[ \t]|`{3,}|~{3,})/.test(lines[i].text)
+                    && !/^ {0,3}([-*_])([ \t]*\1){2,}[ \t]*$/.test(lines[i].text)
+                    && !isTableStart(i)) {
+                    pEnd = lineEnd(lines[i]); i++;
+                }
+                html.push('<p>' + inline(src, pStart, pEnd) + '</p>');
+            }
+
+            for (let h = 0; h < headings.length; h++) {
+                const next = headings.slice(h + 1).find(x => x.level <= headings[h].level);
+                headings[h].end = next ? next.start : src.length;
+            }
+            return { html: html.join('\n'), headings };
+        }
+
+        /* -------------------------------------------------- anchors & resolution */
+
+        const normalize = s => s.replace(/\r\n/g, '\n').normalize('NFC').replace(/\s+/g, ' ');
+
+        function sectionFor(offset) {
+            let found = null;
+            for (const h of state.headings) if (h.start <= offset && offset < h.end) found = h;
+            if (!found) return { heading: '' };
+            return { heading: found.text, text: state.body.slice(found.contentStart, found.end).trim().slice(0, 2000) };
+        }
+
+        function makeSelection(start, end) {
+            return {
+                text: state.body.slice(start, end),
+                prefix: state.body.slice(Math.max(0, start - CTX), start),
+                suffix: state.body.slice(end, Math.min(state.body.length, end + CTX))
+            };
+        }
+
+        function findAll(haystack, needle, from, to) {
+            const hits = [];
+            if (!needle) return hits;
+            let idx = haystack.indexOf(needle, from);
+            while (idx !== -1 && idx + needle.length <= to) {
+                hits.push(idx);
+                idx = haystack.indexOf(needle, idx + 1);
+            }
+            return hits;
+        }
+
+        function commonSuffixLen(a, b) {
+            let n = 0;
+            while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
+            return n;
+        }
+
+        function commonPrefixLen(a, b) {
+            let n = 0;
+            while (n < a.length && n < b.length && a[n] === b[n]) n++;
+            return n;
+        }
+
+        function similarity(a, b) {
+            if (a === b) return 1;
+            if (!a.length || !b.length) return 0;
+            const bigrams = s => {
+                const m = new Map();
+                for (let i = 0; i < s.length - 1; i++) { const g = s.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); }
+                return m;
+            };
+            const A = bigrams(a), B = bigrams(b);
+            let shared = 0;
+            A.forEach((v, k) => { shared += Math.min(v, B.get(k) || 0); });
+            return (2 * shared) / ((a.length - 1) + (b.length - 1));
+        }
+
+        // Simplified implementation of SPECIFICATION.md §6.3 over the raw source text.
+        function resolveEntry(entry) {
+            const body = state.body;
+            const sel = entry.selection;
+            if (!sel || !sel.text) return null;
+            const prefix = sel.prefix || '', suffix = sel.suffix || '';
+
+            let from = 0, to = body.length, scoped = false;
+            const h = state.headings.find(x => x.text === (entry.section && entry.section.heading));
+            if (h) { from = h.contentStart; to = h.end; scoped = true; }
+
+            const search = (lo, hi, confidence) => {
+                const anchored = findAll(body, prefix + sel.text + suffix, lo, hi);
+                if (anchored.length === 1) {
+                    const s = anchored[0] + prefix.length;
+                    return { start: s, end: s + sel.text.length, confidence };
+                }
+                const hits = findAll(body, sel.text, lo, hi);
+                if (!hits.length) return null;
+                let best = null, bestScore = -1, tie = false;
+                for (const s of hits) {
+                    const score = commonSuffixLen(body.slice(Math.max(0, s - CTX), s), prefix)
+                        + commonPrefixLen(body.slice(s + sel.text.length, s + sel.text.length + CTX), suffix);
+                    if (score > bestScore) { bestScore = score; best = s; tie = false; }
+                    else if (score === bestScore) tie = true;
+                }
+                if (best === null) return null;
+                if (tie && hits.length > 1 && bestScore === 0) best = hits[0];
+                return { start: best, end: best + sel.text.length, confidence };
+            };
+
+            let r = scoped ? search(from, to, 'exact') : null;
+            if (!r) r = search(0, body.length, scoped ? 'relocated' : 'exact');
+            if (r) return r;
+
+            const applied = detectApplied(entry);
+            if (applied) return applied;
+
+            // Stage 4 — similarity against comparable spans in the candidate region.
+            const region = body.slice(from, to);
+            const win = sel.text.length;
+            let best = null, bestSim = 0;
+            for (let i = 0; i + win <= region.length; i += Math.max(1, Math.floor(win / 8))) {
+                const sim = similarity(normalize(region.slice(i, i + win)), normalize(sel.text));
+                if (sim > bestSim) { bestSim = sim; best = from + i; }
+            }
+            if (best !== null && bestSim >= FUZZY_THRESHOLD) return { start: best, end: best + win, confidence: 'fuzzy' };
+            return { confidence: 'unmatched' };
+        }
+
+        // §6.4 already-applied detection.
+        function detectApplied(entry) {
+            const body = state.body, sel = entry.selection;
+            const prefix = sel.prefix || '', suffix = sel.suffix || '';
+            if (!prefix && !suffix) return null;
+            if (entry.operation === 'delete') {
+                const at = body.indexOf(prefix + suffix);
+                if (at !== -1) return { start: at + prefix.length, end: at + prefix.length, confidence: 'applied' };
+            }
+            if (entry.operation === 'reword' || entry.operation === 'add') {
+                const at = body.indexOf(prefix + (entry.value || '') + suffix);
+                if (at !== -1) {
+                    const s = at + prefix.length;
+                    return { start: s, end: s + (entry.value || '').length, confidence: 'applied' };
+                }
+            }
+            return null;
+        }
+
+        function resolveAll() {
+            state.resolved.clear();
+            for (const entry of state.payload.entries) {
+                if (isDeleted(entry)) continue;
+                const r = entry.selection ? resolveEntry(entry) : null;
+                if (r) state.resolved.set(entry.id, r);
+                if (r && r.confidence === 'unmatched' && !entry.events.some(e => e.type === 'unmatched')) {
+                    entry.events.push({ eventId: uuid(), type: 'unmatched', timestamp: nowIso() });
+                }
+            }
+        }
+
+        const isDeleted = entry => entry.events.some(e => e.type === 'deleted');
+
+        /* ------------------------------------------------------------ rendering */
+
+        function render() {
+            const { html, headings } = renderMarkdown(state.body);
+            state.headings = headings;
+            el.view.innerHTML = html;
+            state.spans = Array.from(el.view.querySelectorAll('span[data-s]'));
+            state.spanText = new Map(state.spans.map(s => [s, s.textContent]));
+            resolveAll();
+            paintHighlights();
+            renderList();
+            renderDiagrams();
+            el.count.textContent = String(state.payload.entries.filter(e => !isDeleted(e)).length);
+            el.docName.textContent = state.docName;
+        }
+
+        const diagramCache = new Map();
+        let diagramSeq = 0;
+
+        function showSource(fig, show) {
+            const src = fig.querySelector('.mermaid-source');
+            const btn = fig.querySelector('.mermaid-toggle');
+            src.hidden = !show;
+            btn.textContent = show ? 'Hide source' : 'Show source';
+        }
+
+        async function renderDiagrams() {
+            const figures = Array.from(el.view.querySelectorAll('.mermaid-figure'));
+            if (!figures.length) return;
+            const available = typeof mermaid !== 'undefined';
+            for (const fig of figures) {
+                const target = fig.querySelector('.mermaid-diagram');
+                const code = fig.querySelector('.mermaid-source code').textContent;
+                if (!available) {
+                    fig.classList.add('failed');
+                    target.textContent = 'lib/mermaid.min.js was not loaded; showing source instead.';
+                    showSource(fig, true);
+                    continue;
+                }
+                if (diagramCache.has(code)) { target.innerHTML = diagramCache.get(code); continue; }
+                try {
+                    const { svg } = await mermaid.render('mmd-' + (++diagramSeq), code);
+                    diagramCache.set(code, svg);
+                    target.innerHTML = svg;
+                } catch (err) {
+                    fig.classList.add('failed');
+                    target.textContent = 'Diagram error: ' + (err && err.message ? err.message : String(err));
+                    showSource(fig, true);
+                }
+            }
+        }
+
+        // Keeps a mermaid source block open while it contains a highlighted annotation.
+        function revealAnnotatedSources() {
+            el.view.querySelectorAll('.mermaid-source mark.hl').forEach(mark => {
+                showSource(mark.closest('.mermaid-figure'), true);
+            });
+        }
+
+        function paintHighlights() {
+            const marks = [];
+            for (const entry of state.payload.entries) {
+                if (isDeleted(entry)) continue;
+                const r = state.resolved.get(entry.id);
+                if (!r || r.confidence === 'unmatched') continue;
+                marks.push({ start: r.start, end: Math.max(r.end, r.start + 1), id: entry.id, op: entry.operation });
+            }
+            for (const sp of state.spans) {
+                const orig = state.spanText.get(sp);
+                const s0 = Number(sp.dataset.s), e0 = s0 + orig.length;
+                const hits = marks.filter(m => m.start < e0 && m.end > s0);
+                sp.textContent = orig;
+                if (!hits.length) continue;
+                const frag = document.createDocumentFragment();
+                let cursor = s0;
+                hits.sort((a, b) => a.start - b.start);
+                for (const hit of hits) {
+                    const s = Math.max(s0, hit.start), e = Math.min(e0, hit.end);
+                    if (e <= cursor) continue;
+                    if (s > cursor) frag.appendChild(document.createTextNode(orig.slice(cursor - s0, s - s0)));
+                    const mark = document.createElement('mark');
+                    mark.className = 'hl op-' + hit.op + (hit.id === state.activeId ? ' active' : '');
+                    mark.dataset.id = hit.id;
+                    mark.textContent = orig.slice(s - s0, e - s0) || '\u200b';
+                    frag.appendChild(mark);
+                    cursor = e;
+                }
+                if (cursor < e0) frag.appendChild(document.createTextNode(orig.slice(cursor - s0)));
+                sp.textContent = '';
+                sp.appendChild(frag);
+            }
+            revealAnnotatedSources();
+        }
+
+        function renderList() {
+            const entries = state.payload.entries.filter(e => el.showDeleted.checked || !isDeleted(e));
+            if (!entries.length) {
+                el.list.innerHTML = '<div class="empty">No annotations yet. Select text in the document.</div>';
+                return;
+            }
+            el.list.innerHTML = '';
+            for (const entry of entries) {
+                const r = state.resolved.get(entry.id);
+                const card = document.createElement('div');
+                card.className = 'card' + (entry.id === state.activeId ? ' active' : '') + (isDeleted(entry) ? ' deleted' : '');
+                card.dataset.id = entry.id;
+
+                const conf = isDeleted(entry) ? 'deleted' : (r ? r.confidence : 'n/a');
+                const parts = [
+                    '<div class="row"><span class="badge op-' + entry.operation + '">' + entry.operation + '</span>',
+                    '<span class="badge state-' + conf + '">' + conf + '</span>',
+                    '<span class="meta">' + (entry.section && entry.section.heading ? escapeHtml(entry.section.heading) : 'document') + '</span></div>'
+                ];
+                if (entry.selection && entry.selection.text)
+                    parts.push('<div class="quote">' + escapeHtml(entry.selection.text) + '</div>');
+                if (typeof entry.value === 'string' && entry.value !== '')
+                    parts.push('<div class="quote value">' + escapeHtml(entry.value) + '</div>');
+                if (entry.comment) parts.push('<div>' + escapeHtml(entry.comment) + '</div>');
+                parts.push('<div class="row" style="margin-top:6px"><span class="meta">'
+                    + new Date(entry.createdAt).toLocaleString() + '</span>'
+                    + (isDeleted(entry) ? '' : '<button class="danger" data-act="delete" style="margin-left:auto">Delete</button>')
+                    + '</div>');
+                card.innerHTML = parts.join('');
+                el.list.appendChild(card);
+            }
+        }
+
+        /* ------------------------------------------------- selection -> offsets */
+
+        function rangeToSource(range) {
+            let start = null, end = null;
+            for (const sp of state.spans) {
+                if (!range.intersectsNode(sp)) continue;
+                const spRange = document.createRange();
+                spRange.selectNodeContents(sp);
+                const r = range.cloneRange();
+                if (r.compareBoundaryPoints(Range.START_TO_START, spRange) < 0) r.setStart(sp, 0);
+                if (r.compareBoundaryPoints(Range.END_TO_END, spRange) > 0) r.setEnd(spRange.endContainer, spRange.endOffset);
+                const text = r.toString();
+                if (!text) continue;
+                const before = document.createRange();
+                before.setStart(sp, 0);
+                before.setEnd(r.startContainer, r.startOffset);
+                const s = Number(sp.dataset.s) + before.toString().length;
+                const e = s + text.length;
+                if (start === null || s < start) start = s;
+                if (end === null || e > end) end = e;
+            }
+            return start === null || end <= start ? null : { start, end };
+        }
+
+        /* ------------------------------------------------------------- mutation */
+
+        function addEntry({ operation, start, end, comment, value }) {
+            const ts = nowIso();
+            const entry = {
+                id: uuid(),
+                kind: operation === 'comment' ? 'comment' : 'text-edit',
+                operation,
+                createdAt: ts,
+                section: sectionFor(start),
+                selection: makeSelection(start, end),
+                events: [{ eventId: uuid(), type: 'created', timestamp: ts }]
+            };
+            if (comment) entry.comment = comment;
+            if (operation === 'add' || operation === 'reword') entry.value = value || '';
+            state.payload.entries.push(entry);
+            state.payload.updatedAt = ts;
+            state.activeId = entry.id;
+            persist();
+            render();
+        }
+
+        function deleteEntry(id) {
+            const entry = state.payload.entries.find(e => e.id === id);
+            if (!entry || isDeleted(entry)) return;
+            entry.events.push({ eventId: uuid(), type: 'deleted', timestamp: nowIso() });
+            state.payload.updatedAt = nowIso();
+            if (state.activeId === id) state.activeId = null;
+            persist();
+            render();
+        }
+
+        /* ------------------------------------------------------------ entry form */
+
+        function openForm(operation, start, end) {
+            state.pending = { operation, start, end };
+            const selected = state.body.slice(start, end);
+            const needsValue = operation === 'add' || operation === 'reword';
+            el.form.hidden = false;
+            el.form.innerHTML =
+                '<div class="row"><span class="badge op-' + operation + '">' + operation + '</span>'
+                + '<span class="meta">' + escapeHtml(sectionFor(start).heading || 'document') + '</span></div>'
+                + '<div class="quote">' + escapeHtml(selected) + '</div>'
+                + (needsValue ? '<label for="fValue">' + (operation === 'add' ? 'Text to insert' : 'Replacement text') + '</label>'
+                    + '<textarea id="fValue" rows="3"></textarea>' : '')
+                + '<label for="fComment">Comment' + (operation === 'comment' ? ' (required)' : ' (optional)') + '</label>'
+                + '<textarea id="fComment" rows="3"></textarea>'
+                + '<div class="row" style="margin-top:8px"><button class="primary" id="fSave">Save annotation</button>'
+                + '<button id="fCancel">Cancel</button></div>';
+            (document.getElementById('fValue') || document.getElementById('fComment')).focus();
+
+            document.getElementById('fCancel').onclick = closeForm;
+            document.getElementById('fSave').onclick = () => {
+                const comment = document.getElementById('fComment').value.trim();
+                const valueEl = document.getElementById('fValue');
+                if (operation === 'comment' && !comment) { setStatus('A comment is required.', true); return; }
+                if (needsValue && !valueEl.value) { setStatus('A replacement or insertion value is required.', true); return; }
+                addEntry({ operation, start, end, comment, value: valueEl ? valueEl.value : undefined });
+                closeForm();
+            };
+        }
+
+        function closeForm() {
+            state.pending = null;
+            el.form.hidden = true;
+            el.form.innerHTML = '';
+        }
+
+        /* ------------------------------------------------------------ persistence */
+
+        function persist() {
+            try {
+                localStorage.setItem(STORE_KEY, JSON.stringify({
+                    docName: state.docName, body: state.body, payload: state.payload
+                }));
+            } catch (err) {
+                setStatus('Could not write to local storage.', true);
+            }
+        }
+
+        function restore() {
+            try {
+                const raw = localStorage.getItem(STORE_KEY);
+                if (!raw) return false;
+                const saved = JSON.parse(raw);
+                if (!saved || typeof saved.body !== 'string') return false;
+                const errors = validatePayload(saved.payload);
+                if (errors.length) return false;
+                state.docName = saved.docName || 'document.md';
+                state.body = saved.body;
+                state.payload = saved.payload;
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
+
+        function download(name, text, type) {
+            const blob = new Blob([text], { type: type + ';charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function loadMarkdown(name, text) {
+            const { body, raw } = splitDocument(text);
+            let payload = emptyPayload();
+            if (raw !== null) {
+                let parsed;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (err) {
+                    setStatus('Embedded payload is not valid JSON: ' + err.message, true);
+                    return;
+                }
+                const errors = validatePayload(parsed);
+                if (errors.length) { setStatus('Embedded payload error: ' + errors[0], true); return; }
+                payload = parsed;
+            }
+            state.docName = name;
+            state.body = body;
+            state.payload = payload;
+            state.activeId = null;
+            closeForm();
+            persist();
+            render();
+            setStatus(raw !== null ? 'Loaded embedded payload.' : 'Loaded document without annotations.');
+        }
+
+        function loadSidecar(text) {
+            let parsed;
+            try {
+                parsed = JSON.parse(text);
+            } catch (err) {
+                setStatus('Sidecar is not valid JSON: ' + err.message, true);
+                return;
+            }
+            const errors = validatePayload(parsed);
+            if (errors.length) { setStatus('Sidecar error: ' + errors[0], true); return; }
+            state.payload = parsed;
+            state.activeId = null;
+            persist();
+            render();
+            setStatus('Loaded sidecar payload.');
+        }
+
+        /* ---------------------------------------------------------------- events */
+
+        el.view.addEventListener('mouseup', () => {
+            setTimeout(() => {
+                const sel = window.getSelection();
+                if (!sel || sel.isCollapsed || sel.rangeCount === 0) { el.bubble.style.display = 'none'; return; }
+                const range = sel.getRangeAt(0);
+                if (!el.view.contains(range.commonAncestorContainer)) { el.bubble.style.display = 'none'; return; }
+                const src = rangeToSource(range);
+                if (!src) { el.bubble.style.display = 'none'; return; }
+                el.bubble.dataset.start = src.start;
+                el.bubble.dataset.end = src.end;
+                const rect = range.getBoundingClientRect();
+                el.bubble.style.display = 'flex';
+                el.bubble.style.top = (rect.top + window.scrollY - el.bubble.offsetHeight - 8) + 'px';
+                el.bubble.style.left = (rect.left + window.scrollX) + 'px';
+            }, 0);
+        });
+
+        document.addEventListener('mousedown', ev => {
+            if (!el.bubble.contains(ev.target)) el.bubble.style.display = 'none';
+        });
+
+        el.bubble.addEventListener('click', ev => {
+            const op = ev.target.dataset.op;
+            if (!op) return;
+            openForm(op, Number(el.bubble.dataset.start), Number(el.bubble.dataset.end));
+            el.bubble.style.display = 'none';
+            window.getSelection().removeAllRanges();
+        });
+
+        el.view.addEventListener('click', ev => {
+            const toggle = ev.target.closest('.mermaid-toggle');
+            if (toggle) {
+                const fig = toggle.closest('.mermaid-figure');
+                showSource(fig, fig.querySelector('.mermaid-source').hidden);
+                return;
+            }
+            const mark = ev.target.closest('mark.hl');
+            if (!mark) return;
+            state.activeId = mark.dataset.id;
+            paintHighlights();
+            renderList();
+            const card = el.list.querySelector('.card[data-id="' + mark.dataset.id + '"]');
+            if (card) card.scrollIntoView({ block: 'nearest' });
+        });
+
+        el.list.addEventListener('click', ev => {
+            const card = ev.target.closest('.card');
+            if (!card) return;
+            if (ev.target.dataset.act === 'delete') { deleteEntry(card.dataset.id); return; }
+            state.activeId = card.dataset.id;
+            paintHighlights();
+            renderList();
+            const mark = el.view.querySelector('mark.hl[data-id="' + card.dataset.id + '"]');
+            if (mark) mark.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+
+        el.showDeleted.addEventListener('change', renderList);
+
+        document.getElementById('btnOpenMd').onclick = () => document.getElementById('fileMd').click();
+        document.getElementById('btnOpenSidecar').onclick = () => document.getElementById('fileSidecar').click();
+
+        document.getElementById('fileMd').onchange = ev => {
+            const file = ev.target.files[0];
+            if (!file) return;
+            file.text().then(text => loadMarkdown(file.name, text));
+            ev.target.value = '';
+        };
+
+        document.getElementById('fileSidecar').onchange = ev => {
+            const file = ev.target.files[0];
+            if (!file) return;
+            file.text().then(loadSidecar);
+            ev.target.value = '';
+        };
+
+        document.getElementById('btnSaveMd').onclick = () => {
+            state.payload.updatedAt = nowIso();
+            download(state.docName, buildDocument(state.body, state.payload), 'text/markdown');
+        };
+
+        document.getElementById('btnSaveSidecar').onclick = () => {
+            state.payload.updatedAt = nowIso();
+            download(state.docName + '.annotations', JSON.stringify(state.payload, null, 2), 'application/json');
+        };
+
+        document.getElementById('btnClearStore').onclick = () => {
+            localStorage.removeItem(STORE_KEY);
+            bootstrap(true);
+            setStatus('Storage cleared, sample document restored.');
+        };
+
+        window.addEventListener('dragover', ev => ev.preventDefault());
+        window.addEventListener('drop', ev => {
+            ev.preventDefault();
+            const file = ev.dataTransfer.files[0];
+            if (!file) return;
+            file.text().then(text => {
+                if (/\.annotations$|\.json$/i.test(file.name)) loadSidecar(text);
+                else loadMarkdown(file.name, text);
+            });
+        });
+
+        /* ------------------------------------------------------------- bootstrap */
+
+        function bootstrap(forceSample) {
+            if (typeof mermaid !== 'undefined') {
+                mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
+            }
+            if (!forceSample && restore()) { render(); setStatus('Restored from local storage.'); return; }
+            state.docName = 'sample.md';
+            state.body = document.getElementById('sampleDoc').textContent.replace(/^\n/, '');
+            state.payload = emptyPayload();
+            render();
+        }
+
+        bootstrap(false);
+    </script>
+</body>
+
+</html>
