@@ -1,0 +1,212 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://base.bmwgroup.net/schema/document-comments.json",
+    "title": "BASE document comments",
+    "description": "Append-only review requests and agent responses for one Markdown document.",
+    "$comment": "The Markdown Annotation Extension storage, discovery, and embedded-block rules are defined in SPECIFICATION.md.",
+    "type": "object",
+    "required": [
+        "schemaVersion",
+        "createdAt",
+        "updatedAt",
+        "entries"
+    ],
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "schemaVersion": {
+            "type": "string",
+            "const": "1.0.0"
+        },
+        "createdAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "entries": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/entry"
+            }
+        }
+    },
+    "$defs": {
+        "selection": {
+            "type": "object",
+            "required": [
+                "text"
+            ],
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "prefix": {
+                    "type": "string"
+                },
+                "suffix": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true
+        },
+        "section": {
+            "type": "object",
+            "required": [
+                "heading"
+            ],
+            "properties": {
+                "heading": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true
+        },
+        "event": {
+            "type": "object",
+            "required": [
+                "eventId",
+                "type",
+                "timestamp"
+            ],
+            "properties": {
+                "eventId": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "type": {
+                    "enum": [
+                        "created",
+                        "submitted",
+                        "addressed",
+                        "unmatched",
+                        "deleted"
+                    ]
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "response": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true
+        },
+        "entry": {
+            "type": "object",
+            "required": [
+                "id",
+                "kind",
+                "operation",
+                "createdAt",
+                "section",
+                "events"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "kind": {
+                    "enum": [
+                        "comment",
+                        "text-edit"
+                    ]
+                },
+                "operation": {
+                    "enum": [
+                        "comment",
+                        "delete",
+                        "add",
+                        "reword"
+                    ]
+                },
+                "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "section": {
+                    "$ref": "#/$defs/section"
+                },
+                "selection": {
+                    "$ref": "#/$defs/selection"
+                },
+                "comment": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "value": {
+                    "type": "string"
+                },
+                "events": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/$defs/event"
+                    }
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "operation": {
+                                "const": "comment"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "comment"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "operation": {
+                                "enum": [
+                                    "delete",
+                                    "add",
+                                    "reword"
+                                ]
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "selection"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "operation": {
+                                "enum": [
+                                    "add",
+                                    "reword"
+                                ]
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "value"
+                        ]
+                    }
+                }
+            ],
+            "additionalProperties": true
+        }
+    },
+    "additionalProperties": true
+}
