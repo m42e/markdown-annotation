@@ -20,6 +20,10 @@ people and tools can read.
 
 ## Try it in two minutes
 
+This browser editor is a legacy version 1 prototype. It cannot read or preserve
+version 2.0.0 payloads; follow the new schema only with a version 2.0.0
+consumer.
+
 1. Open [simple-editor/index.html](simple-editor/index.html) in a browser
    (double-click it, or drag it onto a browser window).
 2. A sample document loads. Select any text in the rendered view.
@@ -43,7 +47,22 @@ brings back the sample.
 | `delete` | "Remove this." | Yes |
 
 A `comment` is a conversation. The other three are concrete proposals that a
-person or an agent can apply.
+person or an agent can apply. Text edits may also carry an optional `comment`
+with the rationale for the change.
+
+An `add` inserts its `value` after the selected text by default; set
+`selection.placement` to `before` to insert before it. The value is copied
+verbatim, so include any desired spaces or line breaks in the value itself. An
+empty `selection.text` marks an insertion point only at the document's start or
+end and requires both context fields; a present-empty context asserts the
+corresponding boundary. For an empty document, both context fields are present
+and empty:
+
+```json
+{"operation":"add","selection":{"text":"","prefix":"","suffix":""},"value":"Start here."}
+```
+
+This inserts `Start here.` at the document's only position.
 
 ## Where the annotations live
 
@@ -59,7 +78,13 @@ The actual content.
 
 ---
 ```json:annotation
-{ "schemaVersion": "1.0.0", "entries": [ ... ] }
+{
+  "$schema": "urn:markdown-annotation:document-comments:2.0.0",
+  "schemaVersion": "2.0.0",
+  "createdAt": "2026-10-10T12:00:00Z",
+  "updatedAt": "2026-10-10T12:00:00Z",
+  "entries": []
+}
 ```
 ````
 
@@ -85,33 +110,50 @@ the document has moved on. Line numbers break immediately. So each entry
 records what it points at, plus the text just before and just after it, plus the
 heading it lived under.
 
-Finding it again is a ladder. Each rung is tried in order, and the first hit
-wins:
+Before looking for text to change, a consumer checks whether the requested
+result is already present at the original contextual location. If the paragraph
+has moved to another section and the correction is not found there, it checks
+the full document using the same context. These checks make applying the same
+annotation repeatedly safe, even if the old wording still appears elsewhere.
+If the change is not already present, the consumer looks for the selected text,
+first in its original section and then across the document. The selected text
+must fit within its candidate section, while before/after context can cross
+section boundaries. An empty section heading means the whole document; producers
+use it when no one heading contains the full selection:
 
 ```mermaid
 flowchart TD
-  A[Look inside the original section] --> B[Match text with its before/after context]
-  B --> C[Match the text anywhere in the document]
-  C --> D[Close-enough match, flagged for human review]
-  D --> E[Was the change already made?]
-  E --> F[Unmatched - reported, never discarded]
+  A[Check correction in original section] --> B[Check correction across document]
+  B --> C[Find one full-context match]
+  C --> D[Exact; relocation is a separate flag]
+  B --> E[Repeated or partial-context matches: human review]
+  C --> F[No full-context match: contextual and fuzzy candidates]
+  F --> G[Ambiguous or fuzzy: human review]
+  F --> H[Unmatched - reported, never discarded]
 ```
 
-That fifth rung matters more than it sounds. If someone already fixed the typo,
-the original text is gone — but that's success, not failure. The tool checks
-whether the suggested result is now sitting between the recorded before and
-after context, and marks the entry as handled instead of crying about a missing
-match.
+If someone already fixed the typo, the original text is gone — but that's
+success, not failure. The tool checks whether the suggested result is now
+sitting at the recorded contextual location and marks the entry as handled.
+An old occurrence elsewhere in the document does not stop this check.
 
-Every result carries a confidence label: `exact`, `relocated` (found, but the
-section changed), `fuzzy` (needs a human to confirm), `applied`, or `unmatched`.
-Only `exact` is safe to apply unattended.
+Every result has one state: `exact`, `fuzzy`, `applied`, `ambiguous`, or
+`unmatched`. A separate Boolean `relocated` reports whether the saved section
+could not constrain the result; it does not replace or change the state. One
+literal source equality of the selected text and complete contexts is required
+for `exact`. Normalized-only matches require review. Repeated or partial-context
+candidates are `ambiguous` and need human review; `fuzzy` candidates also need
+confirmation. A source candidate may be applied only after review; a completion
+candidate may be confirmed as already handled and must never be applied again.
+Only an exact result with `relocated=false` is safe to apply unattended.
 
 ## Nothing is ever thrown away
 
-Each entry keeps a timeline of events — created, submitted, addressed,
-unmatched, deleted. "Deleting" an annotation appends a `deleted` event; it does
-not erase history. Tick **show deleted** in the editor to see them again.
+Each entry keeps an append-only timeline of events — created, submitted,
+addressed, unmatched, deleted. Addressed entries pause until explicitly
+reopened with `submitted`; deleted entries remain in history and are terminal.
+Resolving an entry is read-only; a writer records a result by appending an event.
+Tick **show deleted** in the editor to see deleted annotations again.
 
 This is deliberate. In a review you want to know what was asked, what was done
 about it, and what was dropped on purpose.
@@ -123,14 +165,18 @@ extension, a linter, an agent — read [SPECIFICATION.md](SPECIFICATION.md). It 
 normative, with a conformance checklist at the end. The short version:
 
 - Validate against [schema.json](schema.json); reject unknown `schemaVersion`
-  values rather than guessing.
+  values rather than guessing, including v1 `1.0.0` unless migration was
+  explicitly requested.
+- Run the schema contract checks with `python3 -m unittest discover -s tests`
+  (requires the Python `jsonschema[format]` package extra).
 - Treat the payload as data. Never execute or render values from it.
 - Preserve properties you don't understand when rewriting.
 - Don't fall back to the sidecar when an embedded block is broken. Report it.
 
 ## Status
 
-Specification version 1.0.0, schema version 1.0.0. The editor in
-[simple-editor/](simple-editor/index.html) is a reference implementation and a
-playground — it has no server, no dependencies beyond a bundled Mermaid build,
-and it keeps everything on your machine.
+Specification version 2.0.0, schema version 2.0.0. The editor in
+[simple-editor/](simple-editor/index.html) remains a legacy v1 prototype and
+playground. It reads and writes schema version 1.0.0 and is not a conforming
+version 2.0.0 implementation. It has no server, no dependencies beyond a
+bundled Mermaid build, and keeps everything on your machine.
