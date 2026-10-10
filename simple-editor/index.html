@@ -466,11 +466,11 @@ confirmation. This will be adressed in the next release.
     <script>
         'use strict';
 
-        const SCHEMA_URL = 'urn:markdown-annotation:document-comments:1.0.0';
-        const SCHEMA_VERSION = '1.0.0';
+        const SCHEMA_URL = 'urn:markdown-annotation:document-comments:2.0.0';
+        const SCHEMA_VERSION = '2.0.0';
         const CTX = 96;              // characters of prefix/suffix context captured per entry
         const FUZZY_THRESHOLD = 0.8;
-        const STORE_KEY = 'markdown-annotator:v1';
+        const STORE_KEY = 'markdown-annotator:v2';
 
         const el = {
             view: document.getElementById('view'),
@@ -492,6 +492,7 @@ confirmation. This will be adressed in the next release.
             spanText: new Map(),
             resolved: new Map(), // entryId -> {start, end, confidence}
             activeId: null,
+            embedded: false,
             pending: null        // {operation, start, end}
         };
 
@@ -515,18 +516,52 @@ confirmation. This will be adressed in the next release.
 
         /* ------------------------------------------------- embedded block (§4.2) */
 
-        const EMBEDDED_RE = /\n[ \t]*-{3}[ \t]*\r?\n\s*```json:annotation[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*\s*$/;
-
+        // Recognize the final storage block without parsing its JSON first.
         function splitDocument(text) {
-            const src = text.replace(/\r\n/g, '\n');
-            const m = EMBEDDED_RE.exec(src);
-            if (!m) return { body: src, raw: null };
-            return { body: src.slice(0, m.index), raw: m[1] };
+            const lines = [...text.matchAll(/[^\r\n]*(?:\r?\n|$)/g)].filter(m => m[0]);
+            let offset = 0, fence = null, candidate = null, found = null;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i][0], content = line.replace(/\r?\n$/, '');
+                if (candidate) {
+                    if (/^[ \t]*```[ \t]*$/.test(content)) {
+                        if (text.slice(offset + line.length).trim() === '') found = {
+                            body: text.slice(0, candidate.start), raw: text.slice(candidate.payloadStart, offset)
+                        };
+                        candidate = null;
+                    }
+                } else if (fence) {
+                    if (new RegExp('^ {0,3}' + fence.mark + '{' + fence.length + ',}[ \t]*$').test(content)) fence = null;
+                } else {
+                    const preceding = text.slice(0, offset);
+                    const separator = /^[ \t]*---[ \t]*$/.test(content)
+                        && /(?:\r?\n){2}$/.test(preceding);
+                    if (separator) {
+                        let j = i + 1, opening = offset + line.length;
+                        while (j < lines.length && /^[ \t]*$/.test(lines[j][0].replace(/\r?\n$/, ''))) {
+                            opening += lines[j++][0].length;
+                        }
+                        if (j < lines.length && lines[j][0].replace(/\r?\n$/, '') === '```json:annotation'
+                            && /\r?\n$/.test(lines[j][0])) {
+                            candidate = {start: offset - preceding.match(/(?:\r?\n){2}$/)[0].length,
+                                payloadStart: opening + lines[j][0].length};
+                            i = j;
+                            offset = candidate.payloadStart;
+                            continue;
+                        }
+                    }
+                    const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(content);
+                    if (match && (match[1][0] !== '`' || !match[2].includes('`')))
+                        fence = {mark: match[1][0], length: match[1].length};
+                }
+                offset += line.length;
+            }
+            return found || {body: text, raw: null};
         }
 
         function buildDocument(body, payload) {
-            const json = JSON.stringify(payload, null, 2);
-            return body.replace(/\s*$/, '') + '\n\n---\n```json:annotation\n' + json + '\n```\n';
+            const newline = body.includes('\r\n') ? '\r\n' : '\n';
+            return body + newline + newline + '---' + newline + '```json:annotation' + newline
+                + JSON.stringify(payload, null, 2) + newline + '```' + newline;
         }
 
         function emptyPayload() {
@@ -536,17 +571,49 @@ confirmation. This will be adressed in the next release.
 
         function validatePayload(obj) {
             const errors = [];
-            if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return ['payload is not a JSON object'];
+            const object = x => x && typeof x === 'object' && !Array.isArray(x);
+            const date = x => typeof x === 'string' && !Number.isNaN(Date.parse(x))
+                && /(?:Z|[+-]\d\d:\d\d)$/.test(x);
+            const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!object(obj)) return ['payload is not a JSON object'];
             if (obj.schemaVersion !== SCHEMA_VERSION) errors.push('unsupported schemaVersion: ' + obj.schemaVersion);
-            if (!Array.isArray(obj.entries)) errors.push('entries must be an array');
-            (obj.entries || []).forEach((e, i) => {
-                if (!e.id || !e.kind || !e.operation || !e.section || !Array.isArray(e.events) || !e.events.length)
-                    errors.push('entry ' + i + ' is missing required properties');
-                if (e.operation === 'comment' && !e.comment) errors.push('entry ' + i + ' requires comment');
-                if (['delete', 'add', 'reword'].includes(e.operation) && !(e.selection && e.selection.text))
-                    errors.push('entry ' + i + ' requires selection.text');
-                if (['add', 'reword'].includes(e.operation) && typeof e.value !== 'string')
-                    errors.push('entry ' + i + ' requires value');
+            if (!date(obj.createdAt) || !date(obj.updatedAt)) errors.push('invalid payload timestamp');
+            if (!Array.isArray(obj.entries)) return [...errors, 'entries must be an array'];
+            const ids = new Set();
+            obj.entries.forEach((e, i) => {
+                const label = 'entry ' + i;
+                if (!object(e)) { errors.push(label + ' is not an object'); return; }
+                if (!uuidPattern.test(e.id) || ids.has(e.id)) errors.push(label + ' has invalid or duplicate id');
+                ids.add(e.id);
+                if (!['comment', 'delete', 'add', 'reword'].includes(e.operation)
+                    || e.kind !== (e.operation === 'comment' ? 'comment' : 'text-edit')) errors.push(label + ' has inconsistent operation/kind');
+                if (!date(e.createdAt) || !object(e.section) || typeof e.section.heading !== 'string'
+                    || !object(e.selection) || typeof e.selection.text !== 'string') errors.push(label + ' has invalid anchor or timestamp');
+                else {
+                    const sel = e.selection;
+                    if (e.operation !== 'add' && (!sel.text || 'placement' in sel)) errors.push(label + ' has invalid selection');
+                    if (e.operation === 'add' && (!sel.text &&
+                        (typeof sel.prefix !== 'string' || typeof sel.suffix !== 'string' ||
+                            (sel.prefix !== '' && sel.suffix !== '')))) errors.push(label + ' has invalid boundary anchor');
+                    if ('placement' in sel && (e.operation !== 'add' || !['before','after'].includes(sel.placement))) errors.push(label + ' has invalid placement');
+                }
+                if (e.operation === 'comment' && (typeof e.comment !== 'string' || !e.comment || 'value' in e)) errors.push(label + ' has invalid comment');
+                if (e.operation !== 'comment' && 'comment' in e && (typeof e.comment !== 'string' || !e.comment)) errors.push(label + ' has invalid optional comment');
+                if (['add','reword'].includes(e.operation) !== ('value' in e) ||
+                    ('value' in e && typeof e.value !== 'string')) errors.push(label + ' has invalid value');
+                if (!Array.isArray(e.events) || !e.events.length) { errors.push(label + ' has no events'); return; }
+                let previous = 0;
+                e.events.forEach((event, j) => {
+                    if (!object(event) || !uuidPattern.test(event.eventId) || ids.has(event.eventId)
+                        || !['created','submitted','addressed','unmatched','deleted'].includes(event.type)
+                        || !date(event.timestamp) || Date.parse(event.timestamp) < previous)
+                        errors.push(label + ' has invalid event ' + j);
+                    ids.add(event.eventId);
+                    if (date(event.timestamp)) previous = Date.parse(event.timestamp);
+                    if ((j === 0) !== (event.type === 'created') ||
+                        (j > 0 && e.events[j - 1].type === 'deleted')) errors.push(label + ' has invalid event order');
+                });
+                if (e.events[0] && Date.parse(e.events[0].timestamp) !== Date.parse(e.createdAt)) errors.push(label + ' created event differs from createdAt');
             });
             return errors;
         }
@@ -755,9 +822,10 @@ confirmation. This will be adressed in the next release.
 
         const normalize = s => s.replace(/\r\n/g, '\n').normalize('NFC').replace(/\s+/g, ' ');
 
-        function sectionFor(offset) {
+        function sectionFor(offset, end = offset) {
             let found = null;
-            for (const h of state.headings) if (h.start <= offset && offset < h.end) found = h;
+            for (const h of state.headings) if (h.start <= offset && end <= h.end
+                && (!found || h.level >= found.level)) found = h;
             if (!found) return { heading: '' };
             return { heading: found.text, text: state.body.slice(found.contentStart, found.end).trim().slice(0, 2000) };
         }
@@ -807,88 +875,72 @@ confirmation. This will be adressed in the next release.
             return (2 * shared) / ((a.length - 1) + (b.length - 1));
         }
 
-        // Simplified implementation of SPECIFICATION.md §6.3 over the raw source text.
         function resolveEntry(entry) {
-            const body = state.body;
-            const sel = entry.selection;
-            if (!sel || !sel.text) return null;
-            const prefix = sel.prefix || '', suffix = sel.suffix || '';
-
-            let from = 0, to = body.length, scoped = false;
-            const h = state.headings.find(x => x.text === (entry.section && entry.section.heading));
-            if (h) { from = h.contentStart; to = h.end; scoped = true; }
-
-            const search = (lo, hi, confidence) => {
-                const anchored = findAll(body, prefix + sel.text + suffix, lo, hi);
-                if (anchored.length === 1) {
-                    const s = anchored[0] + prefix.length;
-                    return { start: s, end: s + sel.text.length, confidence };
-                }
-                const hits = findAll(body, sel.text, lo, hi);
-                if (!hits.length) return null;
-                let best = null, bestScore = -1, tie = false;
-                for (const s of hits) {
-                    const score = commonSuffixLen(body.slice(Math.max(0, s - CTX), s), prefix)
-                        + commonPrefixLen(body.slice(s + sel.text.length, s + sel.text.length + CTX), suffix);
-                    if (score > bestScore) { bestScore = score; best = s; tie = false; }
-                    else if (score === bestScore) tie = true;
-                }
-                if (best === null) return null;
-                if (tie && hits.length > 1 && bestScore === 0) best = hits[0];
-                return { start: best, end: best + sel.text.length, confidence };
-            };
-
-            let r = scoped ? search(from, to, 'exact') : null;
-            if (!r) r = search(0, body.length, scoped ? 'relocated' : 'exact');
-            if (r) return r;
-
-            const applied = detectApplied(entry);
-            if (applied) return applied;
-
-            // Stage 4 — similarity against comparable spans in the candidate region.
-            const region = body.slice(from, to);
-            const win = sel.text.length;
-            let best = null, bestSim = 0;
-            for (let i = 0; i + win <= region.length; i += Math.max(1, Math.floor(win / 8))) {
-                const sim = similarity(normalize(region.slice(i, i + win)), normalize(sel.text));
-                if (sim > bestSim) { bestSim = sim; best = from + i; }
-            }
-            if (best !== null && bestSim >= FUZZY_THRESHOLD) return { start: best, end: best + win, confidence: 'fuzzy' };
-            return { confidence: 'unmatched' };
-        }
-
-        // §6.4 already-applied detection.
-        function detectApplied(entry) {
             const body = state.body, sel = entry.selection;
-            const prefix = sel.prefix || '', suffix = sel.suffix || '';
-            if (!prefix && !suffix) return null;
-            if (entry.operation === 'delete') {
-                const at = body.indexOf(prefix + suffix);
-                if (at !== -1) return { start: at + prefix.length, end: at + prefix.length, confidence: 'applied' };
+            const label = entry.section.heading;
+            const regions = label ? state.headings.filter(h => normalize(h.text) === normalize(label)) : [];
+            const missing = !!label && !regions.length;
+            const inside = (start, end) => !label || missing || regions.some(h => h.start <= start && end <= h.end);
+            const relocated = (start, end) => missing || !inside(start, end);
+            const result = (stateName, candidates = [], purpose = 'source') => ({
+                state: stateName, relocated: candidates.some(c => relocated(c.start, c.end)) || missing,
+                purpose, candidates, start: candidates[0]?.start, end: candidates[0]?.end
+            });
+            const literal = (pattern, targetOffset, targetLength) => {
+                if (!pattern) return [];
+                return findAll(body, pattern, 0, body.length).map(at => ({
+                    start: at + targetOffset, end: at + targetOffset + targetLength
+                })).filter(c => (sel.prefix !== '' || c.start - targetOffset === 0)
+                    && (sel.suffix !== '' || c.start - targetOffset + pattern.length === body.length));
+            };
+            const prefix = sel.prefix, suffix = sel.suffix;
+            const complete = typeof prefix === 'string' && typeof suffix === 'string';
+            if (complete && entry.operation !== 'comment') {
+                const value = entry.value || '';
+                let pattern, offset, length = value.length;
+                if (entry.operation === 'delete') { pattern = prefix + suffix; offset = prefix.length; length = 0; }
+                else if (entry.operation === 'reword') { pattern = prefix + value + suffix; offset = prefix.length; }
+                else if (sel.placement === 'before') { pattern = prefix + value + sel.text + suffix; offset = prefix.length; }
+                else { pattern = prefix + sel.text + value + suffix; offset = prefix.length + sel.text.length; }
+                const matches = literal(pattern, offset, length);
+                if (matches.length > 1) return result('ambiguous', matches, 'completion');
+                if (matches.length === 1) return result('applied', matches, 'completion');
             }
-            if (entry.operation === 'reword' || entry.operation === 'add') {
-                const at = body.indexOf(prefix + (entry.value || '') + suffix);
-                if (at !== -1) {
-                    const s = at + prefix.length;
-                    return { start: s, end: s + (entry.value || '').length, confidence: 'applied' };
-                }
+            if (complete) {
+                const pattern = prefix + sel.text + suffix;
+                let matches = literal(pattern, prefix.length, sel.text.length);
+                if (!pattern && entry.operation === 'add' && body === '') matches = [{start: 0, end: 0}];
+                if (matches.length > 1) return result('ambiguous', matches);
+                if (matches.length === 1) return result('exact', matches);
             }
-            return null;
+            if (!sel.text) return result('unmatched');
+            const matches = findAll(body, sel.text, 0, body.length).map(start => ({start, end: start + sel.text.length}));
+            if (matches.length) return result('ambiguous', matches);
+            // Similar text needs human review. The score only suggests a location.
+            const win = sel.text.length, candidates = [];
+            for (let i = 0; i + win <= body.length; i++) {
+                const score = similarity(normalize(body.slice(i, i + win)), normalize(sel.text));
+                if (score >= FUZZY_THRESHOLD) candidates.push({start: i, end: i + win, score});
+            }
+            if (candidates.length) {
+                const best = Math.max(...candidates.map(c => c.score));
+                const top = candidates.filter(c => c.score === best);
+                return result(top.length === 1 ? 'fuzzy' : 'ambiguous', top);
+            }
+            return result('unmatched');
         }
+
+        const lastEvent = entry => entry.events[entry.events.length - 1].type;
+        const isDeleted = entry => lastEvent(entry) === 'deleted';
+        const isAddressed = entry => lastEvent(entry) === 'addressed';
 
         function resolveAll() {
             state.resolved.clear();
             for (const entry of state.payload.entries) {
-                if (isDeleted(entry)) continue;
-                const r = entry.selection ? resolveEntry(entry) : null;
-                if (r) state.resolved.set(entry.id, r);
-                if (r && r.confidence === 'unmatched' && !entry.events.some(e => e.type === 'unmatched')) {
-                    entry.events.push({ eventId: uuid(), type: 'unmatched', timestamp: nowIso() });
-                }
+                if (isDeleted(entry) || isAddressed(entry)) continue;
+                state.resolved.set(entry.id, resolveEntry(entry));
             }
         }
-
-        const isDeleted = entry => entry.events.some(e => e.type === 'deleted');
 
         /* ------------------------------------------------------------ rendering */
 
@@ -952,9 +1004,10 @@ confirmation. This will be adressed in the next release.
         function paintHighlights() {
             const marks = [];
             for (const entry of state.payload.entries) {
-                if (isDeleted(entry)) continue;
+                if (isDeleted(entry) || isAddressed(entry)) continue;
                 const r = state.resolved.get(entry.id);
-                if (!r || r.confidence === 'unmatched') continue;
+                if (!r || r.state === 'unmatched') continue;
+                if (r.state === 'ambiguous' || r.start === undefined) continue;
                 marks.push({ start: r.start, end: Math.max(r.end, r.start + 1), id: entry.id, op: entry.operation });
             }
             for (const sp of state.spans) {
@@ -997,10 +1050,11 @@ confirmation. This will be adressed in the next release.
                 card.className = 'card' + (entry.id === state.activeId ? ' active' : '') + (isDeleted(entry) ? ' deleted' : '');
                 card.dataset.id = entry.id;
 
-                const conf = isDeleted(entry) ? 'deleted' : (r ? r.confidence : 'n/a');
+                const conf = isDeleted(entry) ? 'deleted' : isAddressed(entry) ? 'addressed' : (r ? r.state : 'n/a');
                 const parts = [
                     '<div class="row"><span class="badge op-' + entry.operation + '">' + entry.operation + '</span>',
                     '<span class="badge state-' + conf + '">' + conf + '</span>',
+                    (r && r.relocated ? '<span class="badge">relocated</span>' : '') +
                     '<span class="meta">' + (entry.section && entry.section.heading ? escapeHtml(entry.section.heading) : 'document') + '</span></div>'
                 ];
                 if (entry.selection && entry.selection.text)
@@ -1011,6 +1065,7 @@ confirmation. This will be adressed in the next release.
                 parts.push('<div class="row" style="margin-top:6px"><span class="meta">'
                     + new Date(entry.createdAt).toLocaleString() + '</span>'
                     + (isDeleted(entry) ? '' : '<button class="danger" data-act="delete" style="margin-left:auto">Delete</button>')
+                    + (isAddressed(entry) ? '<button data-act="reopen">Reopen</button>' : '<button data-act="address">Addressed</button>')
                     + '</div>');
                 card.innerHTML = parts.join('');
                 el.list.appendChild(card);
@@ -1043,18 +1098,19 @@ confirmation. This will be adressed in the next release.
 
         /* ------------------------------------------------------------- mutation */
 
-        function addEntry({ operation, start, end, comment, value }) {
+        function addEntry({ operation, start, end, comment, value, placement }) {
             const ts = nowIso();
             const entry = {
                 id: uuid(),
                 kind: operation === 'comment' ? 'comment' : 'text-edit',
                 operation,
                 createdAt: ts,
-                section: sectionFor(start),
+                section: sectionFor(start, end),
                 selection: makeSelection(start, end),
                 events: [{ eventId: uuid(), type: 'created', timestamp: ts }]
             };
             if (comment) entry.comment = comment;
+            if (operation === 'add') entry.selection.placement = placement || 'after';
             if (operation === 'add' || operation === 'reword') entry.value = value || '';
             state.payload.entries.push(entry);
             state.payload.updatedAt = ts;
@@ -1084,6 +1140,7 @@ confirmation. This will be adressed in the next release.
                 '<div class="row"><span class="badge op-' + operation + '">' + operation + '</span>'
                 + '<span class="meta">' + escapeHtml(sectionFor(start).heading || 'document') + '</span></div>'
                 + '<div class="quote">' + escapeHtml(selected) + '</div>'
+                + (operation === 'add' ? '<label for="fPlacement">Placement</label><select id="fPlacement"><option value="after">After selection</option><option value="before">Before selection</option></select>' : '')
                 + (needsValue ? '<label for="fValue">' + (operation === 'add' ? 'Text to insert' : 'Replacement text') + '</label>'
                     + '<textarea id="fValue" rows="3"></textarea>' : '')
                 + '<label for="fComment">Comment' + (operation === 'comment' ? ' (required)' : ' (optional)') + '</label>'
@@ -1098,7 +1155,8 @@ confirmation. This will be adressed in the next release.
                 const valueEl = document.getElementById('fValue');
                 if (operation === 'comment' && !comment) { setStatus('A comment is required.', true); return; }
                 if (needsValue && !valueEl.value) { setStatus('A replacement or insertion value is required.', true); return; }
-                addEntry({ operation, start, end, comment, value: valueEl ? valueEl.value : undefined });
+                addEntry({ operation, start, end, comment, value: valueEl ? valueEl.value : undefined,
+                    placement: operation === 'add' ? document.getElementById('fPlacement').value : undefined });
                 closeForm();
             };
         }
@@ -1114,7 +1172,7 @@ confirmation. This will be adressed in the next release.
         function persist() {
             try {
                 localStorage.setItem(STORE_KEY, JSON.stringify({
-                    docName: state.docName, body: state.body, payload: state.payload
+                    docName: state.docName, body: state.body, payload: state.payload, embedded: state.embedded
                 }));
             } catch (err) {
                 setStatus('Could not write to local storage.', true);
@@ -1132,6 +1190,7 @@ confirmation. This will be adressed in the next release.
                 state.docName = saved.docName || 'document.md';
                 state.body = saved.body;
                 state.payload = saved.payload;
+                state.embedded = !!saved.embedded;
                 return true;
             } catch (err) {
                 return false;
@@ -1166,6 +1225,7 @@ confirmation. This will be adressed in the next release.
                 payload = parsed;
             }
             state.docName = name;
+            state.embedded = raw !== null;
             state.body = body;
             state.payload = payload;
             state.activeId = null;
@@ -1175,7 +1235,11 @@ confirmation. This will be adressed in the next release.
             setStatus(raw !== null ? 'Loaded embedded payload.' : 'Loaded document without annotations.');
         }
 
-        function loadSidecar(text) {
+        function loadSidecar(text, name) {
+            if (state.embedded) { setStatus('Embedded payload is authoritative; sidecar was not loaded.', true); return; }
+            if (name && name !== state.docName + '.annotations') {
+                setStatus('Sidecar filename must be ' + state.docName + '.annotations', true); return;
+            }
             let parsed;
             try {
                 parsed = JSON.parse(text);
@@ -1243,6 +1307,12 @@ confirmation. This will be adressed in the next release.
             const card = ev.target.closest('.card');
             if (!card) return;
             if (ev.target.dataset.act === 'delete') { deleteEntry(card.dataset.id); return; }
+            if (['address','reopen'].includes(ev.target.dataset.act)) {
+                const entry = state.payload.entries.find(e => e.id === card.dataset.id);
+                const type = ev.target.dataset.act === 'address' ? 'addressed' : 'submitted';
+                entry.events.push({eventId: uuid(), type, timestamp: nowIso()});
+                state.payload.updatedAt = nowIso(); persist(); render(); return;
+            }
             state.activeId = card.dataset.id;
             paintHighlights();
             renderList();
@@ -1265,7 +1335,7 @@ confirmation. This will be adressed in the next release.
         document.getElementById('fileSidecar').onchange = ev => {
             const file = ev.target.files[0];
             if (!file) return;
-            file.text().then(loadSidecar);
+            file.text().then(text => loadSidecar(text, file.name));
             ev.target.value = '';
         };
 
@@ -1291,7 +1361,7 @@ confirmation. This will be adressed in the next release.
             const file = ev.dataTransfer.files[0];
             if (!file) return;
             file.text().then(text => {
-                if (/\.annotations$|\.json$/i.test(file.name)) loadSidecar(text);
+                if (/\.annotations$/i.test(file.name)) loadSidecar(text, file.name);
                 else loadMarkdown(file.name, text);
             });
         });
@@ -1306,6 +1376,7 @@ confirmation. This will be adressed in the next release.
             state.docName = 'sample.md';
             state.body = document.getElementById('sampleDoc').textContent.replace(/^\n/, '');
             state.payload = emptyPayload();
+            state.embedded = false;
             render();
         }
 

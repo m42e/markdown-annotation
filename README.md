@@ -20,9 +20,9 @@ people and tools can read.
 
 ## Try it in two minutes
 
-This browser editor is a legacy version 1 prototype. It cannot read or preserve
-version 2.0.0 payloads; follow the new schema only with a version 2.0.0
-consumer.
+The browser editor reads and writes version 2.0.0 payloads. It rejects version
+1 payloads rather than migrating them. Its browser-only resolver is intended for
+review, not unattended application of text edits.
 
 1. Open [simple-editor/index.html](simple-editor/index.html) in a browser
    (double-click it, or drag it onto a browser window).
@@ -176,7 +176,8 @@ normative, with a conformance checklist at the end. The short version:
 ## Status
 
 Specification version 2.0.0, schema version 2.0.0. The editor in
-[simple-editor/](simple-editor/index.html) remains a legacy v1 prototype and
-playground. It reads and writes schema version 1.0.0 and is not a conforming
-version 2.0.0 implementation. It has no server, no dependencies beyond a
-bundled Mermaid build, and keeps everything on your machine.
+[simple-editor/](simple-editor/index.html) creates and loads v2 payloads and
+keeps everything on your machine. It is a review playground, not a fully
+conforming v2 consumer: it does not implement the complete normalization and
+heading-resolution algorithm, duplicate JSON-key detection, or automatic
+sidecar discovery. Use a conforming consumer for unattended edits.

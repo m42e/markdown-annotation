@@ -21,5 +21,5 @@ separate destination.
   implicit merging or fallback from a recognized invalid embedded payload.
 - Define write preconditions, atomic replacement, partial-commit recovery, and
   handling for overlapping edits.
-- Version the schema identifier for 2.0.0. The browser editor remains a legacy
-  1.0.0 prototype and does not conform to this release.
+- Version the schema identifier for 2.0.0. The browser editor now reads and writes 2.0.0 payloads, with the limitations
+  described in the README.
