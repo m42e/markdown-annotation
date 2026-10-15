@@ -625,6 +625,7 @@ confirmation. This will be adressed in the next release.
 
         const SCHEMA_URL = 'urn:markdown-annotation:document-comments:2.0.0';
         const SCHEMA_VERSION = '2.0.0';
+        const EDITOR = { name: 'Simple Annotator', url: 'https://m42e.de/markdown-annotation/' };
         const CTX = 96;              // characters of prefix/suffix context captured per entry
         const FUZZY_THRESHOLD = 0.8;
         const STORE_KEY = 'markdown-annotator:v2';
@@ -723,7 +724,7 @@ confirmation. This will be adressed in the next release.
 
         function emptyPayload() {
             const ts = nowIso();
-            return { $schema: SCHEMA_URL, schemaVersion: SCHEMA_VERSION, createdAt: ts, updatedAt: ts, entries: [] };
+            return { $schema: SCHEMA_URL, schemaVersion: SCHEMA_VERSION, createdAt: ts, updatedAt: ts, editor: { ...EDITOR }, entries: [] };
         }
 
         function validatePayload(obj) {
@@ -735,6 +736,13 @@ confirmation. This will be adressed in the next release.
             if (!object(obj)) return ['payload is not a JSON object'];
             if (obj.schemaVersion !== SCHEMA_VERSION) errors.push('unsupported schemaVersion: ' + obj.schemaVersion);
             if (!date(obj.createdAt) || !date(obj.updatedAt)) errors.push('invalid payload timestamp');
+            if ('editor' in obj) {
+                const editor = obj.editor;
+                if (!object(editor) || typeof editor.name !== 'string' || !editor.name.length
+                    || ('version' in editor && (typeof editor.version !== 'string' || !editor.version.length))
+                    || ('url' in editor && (typeof editor.url !== 'string'
+                        || !/^[a-z][a-z0-9+.-]*:[^\s]*$/i.test(editor.url)))) errors.push('invalid editor metadata');
+            }
             if (!Array.isArray(obj.entries)) return [...errors, 'entries must be an array'];
             const ids = new Set();
             obj.entries.forEach((e, i) => {
@@ -1497,6 +1505,7 @@ confirmation. This will be adressed in the next release.
         };
 
         document.getElementById('btnSaveMd').onclick = () => {
+            state.payload.editor = { ...EDITOR };
             state.payload.updatedAt = nowIso();
             download(state.docName, buildDocument(state.body, state.payload), 'text/markdown');
         };
@@ -1522,6 +1531,7 @@ confirmation. This will be adressed in the next release.
         };
 
         document.getElementById('btnSaveSidecar').onclick = () => {
+            state.payload.editor = { ...EDITOR };
             state.payload.updatedAt = nowIso();
             download(state.docName + '.annotations', JSON.stringify(state.payload, null, 2), 'application/json');
         };

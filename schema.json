@@ -32,6 +32,9 @@
             "items": {
                 "$ref": "#/$defs/entry"
             }
+        },
+        "editor": {
+            "$ref": "#/$defs/editor"
         }
     },
     "$defs": {
@@ -315,6 +318,28 @@
                     }
                 }
             ],
+            "additionalProperties": true
+        },
+        "editor": {
+            "type": "object",
+            "description": "Application that last wrote this annotation payload. Informational, not authenticated authorship.",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "version": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "url": {
+                    "type": "string",
+                    "format": "uri"
+                }
+            },
             "additionalProperties": true
         }
     },

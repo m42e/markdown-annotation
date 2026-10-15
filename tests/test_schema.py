@@ -57,6 +57,20 @@ class AnnotationSchemaTest(unittest.TestCase):
     def test_schema_is_valid_draft_2020_12(self):
         jsonschema.Draft202012Validator.check_schema(self.schema)
 
+    def test_optional_editor_metadata(self):
+        document = payload(entry("delete"))
+        self.assertTrue(self.validator.is_valid(document))
+        for editor in [
+            {"name": "Simple Annotator"},
+            {"name": "Simple Annotator", "version": "1.0", "url":
+             "https://m42e.de/markdown-annotation/", "custom": True},
+        ]:
+            self.assertTrue(self.validator.is_valid(dict(document, editor=editor)))
+        for editor in [None, "Editor", {}, {"name": ""}, {"name": 3},
+                       {"name": "Editor", "version": ""},
+                       {"name": "Editor", "url": "relative/path"}]:
+            self.assertFalse(self.validator.is_valid(dict(document, editor=editor)))
+
     def test_uuid_and_datetime_formats_are_checked(self):
         invalid_id = entry("delete")
         invalid_id["id"] = "not-a-uuid"

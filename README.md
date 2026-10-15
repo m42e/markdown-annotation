@@ -135,6 +135,13 @@ Component.mdx    ->  Component.mdx.annotations
 Use this when the document itself must stay untouched. If both exist, the
 embedded block wins and the mismatch is reported — never silently merged.
 
+Payloads may include optional `editor` application metadata: a required `name`,
+an optional `version`, and an optional homepage or repository `url`. The simple
+annotator includes its name and [homepage](https://m42e.de/markdown-annotation/)
+in both embedded Markdown and sidecar downloads, including when run from disk.
+This identifies the application that last wrote the payload, not its author.
+Existing payloads without this metadata remain valid with schema version 2.0.0.
+
 ## Why annotations survive edits
 
 The hard part isn't storing feedback, it's finding the right spot again after

@@ -62,6 +62,24 @@ specification are to be interpreted as normative requirements.
    embedded payload is associated with the Document that contains it. The
    payload does not contain a document-path property.
 
+The optional top-level `editor` object identifies the application that last wrote
+this payload. It MUST contain a non-empty string `name`; it MAY contain a
+non-empty string `version` and an absolute URI `url` for the application's
+homepage or source repository. For example:
+
+```json
+"editor": {
+  "name": "Simple Annotator",
+  "url": "https://m42e.de/markdown-annotation/"
+}
+```
+
+This metadata is informational, not authenticated authorship. Consumers MUST
+accept payloads without it and MUST NOT fetch or execute its URL automatically.
+Writers MAY replace `editor` when writing a payload; writers that do not set it
+MUST preserve existing metadata, including unknown properties. The application
+version is independent of `schemaVersion`.
+
 ## 4. Supported storage locations
 
 A Document MAY have no annotation payload. If it has an annotation payload, it
@@ -744,8 +762,8 @@ addition to the JSON Schema.
 After entry creation, its `id`, `kind`, `operation`, `createdAt`, `section`,
 `selection`, `comment`, `value`, and any extension properties are immutable.
 Writers MUST append entries and events without deleting, reordering, or
-rewriting existing ones. The only mutable payload field is `updatedAt`, which
-advances on writes. To revise an existing request or its anchors, a writer MUST
+rewriting existing ones. The mutable payload fields are `updatedAt`, which
+advances on writes, and the optional `editor` metadata described in section 3. To revise an existing request or its anchors, a writer MUST
 append a new entry with a new `id`.
 
 ## 7. Write and update behavior
