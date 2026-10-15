@@ -46,6 +46,11 @@ reader with annotation support to inspect the comments. Open entries are include
 addressed and deleted entries are excluded. Unmatched, ambiguous, and otherwise
 unrendered selections are listed in an appendix. Fuzzy anchors are labeled for review.
 
+The PDF also contains the Markdown source and complete annotation payload as an
+attachment. Use **Open .md / PDF** or drop the PDF into the editor to restore it.
+PDFs without an attached `.md` or `.mdx` file cannot be reopened as Markdown.
+Changes made to native PDF comments in another reader are not imported.
+
 Export works offline, including when opening the editor directly from disk. PDF-lib
 1.17.1, fontkit 1.1.1, and Noto Sans are bundled locally in `simple-editor/lib/`;
 no CDN or upload is used. The locally bundled Noto Sans and Noto Sans Mono fonts

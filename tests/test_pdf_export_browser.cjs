@@ -17,6 +17,23 @@ const path = require('path');
         const download = await pendingDownload;
         if (process.env.PDF_TEST_OUTPUT) await download.saveAs(process.env.PDF_TEST_OUTPUT);
         if (await download.failure()) throw Error('PDF download failed');
+        const attachment = await page.evaluate(async bytes => {
+            const source = await extractMarkdownFromPdf(new Uint8Array(bytes));
+            if (!source.text.includes('```json:annotation')) throw Error('Missing annotation payload');
+            return source;
+        }, Array.from(require('fs').readFileSync(await download.path())));
+        await page.locator('#fileMd').setInputFiles({ name: 'roundtrip.pdf', mimeType: 'application/pdf',
+            buffer: require('fs').readFileSync(await download.path()) });
+        await page.waitForFunction(() => document.querySelector('#status').textContent.includes('Loaded embedded payload.'));
+        await page.evaluate(source => {
+            const saved = JSON.parse(localStorage.getItem('markdown-annotator:v2'));
+            if (saved.docName !== source.name || !source.text.startsWith(saved.body))
+                throw Error('Reopening lost Markdown source or filename');
+            const payload = JSON.parse(source.text.split('```json:annotation').at(-1).split('```')[0]);
+            if (JSON.stringify(saved.payload) !== JSON.stringify(payload))
+                throw Error('Reopening changed annotation payload');
+        }, attachment);
+        await page.waitForSelector('.mermaid-diagram svg');
         const result = await page.evaluate(async () => {
             const view = document.querySelector('#view').cloneNode(true);
             const cell = view.querySelector('td span[data-s]');

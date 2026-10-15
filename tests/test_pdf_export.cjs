@@ -4,16 +4,27 @@ const { JSDOM } = require('jsdom');
 const root = require('path').join(__dirname, '../simple-editor/');
 const dom = new JSDOM('<article id="view"></article>', { runScripts: 'outside-only' });
 const w = dom.window;
+w.TextEncoder = TextEncoder;
+w.TextDecoder = TextDecoder;
 for (const file of ['lib/pdf-lib.min.js','lib/fontkit.umd.js','lib/pdf-font.js','lib/pdf-font-styles.js','pdf-export.js']) w.eval(fs.readFileSync(root+file,'utf8'));
 const view = w.document.querySelector('article');
 view.innerHTML = '<h1><span data-s="0">Review export</span></h1><p><span data-s="20">'+ ('Long passage with café, Grüße, and comments. '.repeat(350)) +'</span></p><pre><code><span data-s="20000">first line\nsecond line</span></code></pre>';
 const entries = [{id:'one',operation:'reword',selection:{text:'Long passage'},value:'New wording',comment:'A Unicode comment: Grüße ✓'}, {id:'two',operation:'comment',selection:{text:'missing'},comment:'Unresolved note'}];
 (async()=>{
-const bytes = await w.exportAnnotatedPdf({view,entries,resolved:new Map([['one',{state:'exact',start:20,end:6000}],['two',{state:'unmatched'}]]),title:'Test'});
+const bytes = await w.exportAnnotatedPdf({view,entries,resolved:new Map([['one',{state:'exact',start:20,end:6000}],['two',{state:'unmatched'}]]),title:'Test', markdown:'# Café ✓\r\n\r\n```annotations\r\n{"entries": []}\r\n```', markdownName:'Review.md'});
 if (process.env.PDF_TEST_OUTPUT) fs.writeFileSync(process.env.PDF_TEST_OUTPUT, bytes);
 const d = await w.PDFLib.PDFDocument.load(bytes);
 if (d.getCreator() !== 'Markdown Annotator (https://m42e.de/markdown-annotation/)')
  throw Error('PDF creator metadata must include the annotator homepage');
+const attached = await w.extractMarkdownFromPdf(bytes);
+if (attached.name !== 'Review.md' || attached.text !== '# Café ✓\r\n\r\n```annotations\r\n{"entries": []}\r\n```')
+ throw Error('Attached Markdown did not round-trip exactly');
+// Exercise a nested name tree as produced by other PDF writers.
+const names = d.catalog.lookup(w.PDFLib.PDFName.of('Names'), w.PDFLib.PDFDict);
+const tree = names.lookup(w.PDFLib.PDFName.of('EmbeddedFiles'), w.PDFLib.PDFDict);
+names.set(w.PDFLib.PDFName.of('EmbeddedFiles'), d.context.obj({ Kids: [d.context.register(tree)] }));
+const nested = await w.extractMarkdownFromPdf(await d.save());
+if (nested.text !== attached.text) throw Error('Nested attachment name tree was not read');
 let annotations=0;
 for(const p of d.getPages()){
  const a=p.node.Annots(); if(!a)continue;
@@ -32,6 +43,9 @@ if (last.node.Annots()?.size()) throw Error('Appendix should not have anchored h
 view.innerHTML = '';
 const emptyBytes = await w.exportAnnotatedPdf({view, entries:[], resolved:new Map(), title:'Empty'});
 const empty = await w.PDFLib.PDFDocument.load(emptyBytes);
+await w.extractMarkdownFromPdf(emptyBytes).then(() => { throw Error('Accepted PDF without Markdown'); }, err => {
+ if (!err.message.includes('no attached Markdown')) throw err;
+});
 if (empty.getPageCount() !== 1) throw Error('Empty document should export one page');
 // A long table exercises column layout, wrapping, header repetition, and cell anchors.
 view.innerHTML = '<h1>Structured document</h1><p><strong>Bold</strong> and <em>italic</em>, '

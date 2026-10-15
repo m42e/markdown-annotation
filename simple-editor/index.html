@@ -406,7 +406,7 @@
     <header>
         <span class="title">Markdown Annotator</span>
         <span class="doc-name" id="docName">sample.md</span>
-        <button id="btnOpenMd">Open .md</button>
+        <button id="btnOpenMd">Open .md / PDF</button>
         <button id="btnOpenSidecar">Open .annotations</button>
         <button id="btnSaveMd" class="primary">Save .md (embedded)</button>
         <button id="btnSavePdf">Download annotated PDF</button>
@@ -414,7 +414,7 @@
         <button id="btnClearStore">Reset storage</button>
         <label style="margin:0"><input type="checkbox" id="showDeleted"> show deleted</label>
         <span id="status"></span>
-        <input type="file" id="fileMd" accept=".md,.mdx,text/markdown" hidden>
+        <input type="file" id="fileMd" accept=".md,.mdx,.pdf,text/markdown,application/pdf" hidden>
         <input type="file" id="fileSidecar" accept=".annotations,.json,application/json" hidden>
     </header>
 
@@ -1400,6 +1400,19 @@ confirmation. This will be adressed in the next release.
             setStatus(raw !== null ? 'Loaded embedded payload.' : 'Loaded document without annotations.');
         }
 
+        async function loadDocumentFile(file) {
+            try {
+                if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+                    const attachment = await extractMarkdownFromPdf(await file.arrayBuffer());
+                    loadMarkdown(attachment.name, attachment.text);
+                } else {
+                    loadMarkdown(file.name, await file.text());
+                }
+            } catch (err) {
+                setStatus('Could not open document: ' + err.message, true);
+            }
+        }
+
         function loadSidecar(text, name) {
             if (state.embedded) { setStatus('Embedded payload is authoritative; sidecar was not loaded.', true); return; }
             if (name && name !== state.docName + '.annotations') {
@@ -1493,7 +1506,7 @@ confirmation. This will be adressed in the next release.
         document.getElementById('fileMd').onchange = ev => {
             const file = ev.target.files[0];
             if (!file) return;
-            file.text().then(text => loadMarkdown(file.name, text));
+            loadDocumentFile(file);
             ev.target.value = '';
         };
 
@@ -1517,9 +1530,11 @@ confirmation. This will be adressed in the next release.
             try {
                 await state.diagramsReady;
                 resolveAll();
+                const payload = { ...state.payload, editor: { ...EDITOR }, updatedAt: nowIso() };
                 const bytes = await exportAnnotatedPdf({
                     view: el.view.cloneNode(true), entries: state.payload.entries.filter(e => !isDeleted(e) && !isAddressed(e)),
-                    resolved: state.resolved, title: state.docName
+                    resolved: state.resolved, title: state.docName,
+                    markdown: buildDocument(state.body, payload), markdownName: state.docName
                 });
                 download(state.docName.replace(/\.(md|mdx)$/i, '') + '.annotated.pdf', bytes, 'application/pdf');
                 setStatus('Annotated PDF downloaded.');
@@ -1547,10 +1562,11 @@ confirmation. This will be adressed in the next release.
             ev.preventDefault();
             const file = ev.dataTransfer.files[0];
             if (!file) return;
-            file.text().then(text => {
-                if (/\.annotations$/i.test(file.name)) loadSidecar(text, file.name);
-                else loadMarkdown(file.name, text);
-            });
+            if (/\.annotations$/i.test(file.name)) {
+                file.text().then(text => loadSidecar(text, file.name));
+            } else {
+                loadDocumentFile(file);
+            }
         });
 
         /* ------------------------------------------------------------- bootstrap */

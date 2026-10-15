@@ -1,6 +1,6 @@
 /* Offline PDF export. Every laid-out glyph retains its Markdown source offset. */
 'use strict';
-window.exportAnnotatedPdf = async function ({ view, entries, resolved, title }) {
+window.exportAnnotatedPdf = async function ({ view, entries, resolved, title, markdown, markdownName = title }) {
     if (!window.PDFLib || !window.fontkit || !window.PDF_EXPORT_FONT || !window.PDF_EXPORT_FONTS)
         throw new Error('Local PDF libraries or fonts are missing.');
     const { PDFDocument, PDFHexString, rgb } = PDFLib;
@@ -353,5 +353,46 @@ window.exportAnnotatedPdf = async function ({ view, entries, resolved, title }) 
     for (const [i, p] of doc.getPages().entries()) p.drawText(String(i + 1), {
         x: width - margin - 15, y: 25, size: 9, font, color: rgb(.4,.4,.4)
     });
+    if (typeof markdown === 'string') {
+        await doc.attach(Uint8Array.from(new TextEncoder().encode(markdown)), markdownName, {
+            mimeType: 'text/markdown', description: 'Editable Markdown source with annotations',
+            afRelationship: PDFLib.AFRelationship.Source
+        });
+    }
     return doc.save();
+};
+
+// Read standard EmbeddedFiles name trees, including nested trees from other writers.
+window.extractMarkdownFromPdf = async function (bytes) {
+    const { PDFDocument, PDFName, PDFDict, PDFArray, PDFRawStream, decodePDFRawStream } = PDFLib;
+    const doc = await PDFDocument.load(bytes);
+    const key = name => PDFName.of(name);
+    const names = doc.catalog.lookupMaybe(key('Names'), PDFDict);
+    const root = names?.lookupMaybe(key('EmbeddedFiles'), PDFDict);
+    const visited = new Set();
+    function read(tree) {
+        if (!tree || visited.has(tree)) return null;
+        visited.add(tree);
+        const pairs = tree.lookupMaybe(key('Names'), PDFArray);
+        for (let i = 0; i + 1 < (pairs?.size() || 0); i += 2) {
+            const spec = pairs.lookup(i + 1, PDFDict);
+            const filename = spec.lookup(key('UF')) || spec.lookup(key('F')) || pairs.lookup(i);
+            const name = filename?.decodeText?.();
+            if (!/\.(md|mdx)$/i.test(name || '')) continue;
+            const ef = spec.lookupMaybe(key('EF'), PDFDict);
+            const stream = ef?.lookup(key('UF')) || ef?.lookup(key('F'));
+            if (!(stream instanceof PDFRawStream)) continue;
+            const text = new TextDecoder('utf-8', { fatal: true }).decode(decodePDFRawStream(stream).decode());
+            return { name: name.split(/[\\/]/).pop(), text };
+        }
+        const kids = tree.lookupMaybe(key('Kids'), PDFArray);
+        for (let i = 0; i < (kids?.size() || 0); i++) {
+            const result = read(kids.lookup(i, PDFDict));
+            if (result) return result;
+        }
+        return null;
+    }
+    const result = read(root);
+    if (!result) throw new Error('This PDF has no attached Markdown (.md or .mdx) file.');
+    return result;
 };
