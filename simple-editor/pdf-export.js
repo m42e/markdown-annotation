@@ -321,9 +321,8 @@ window.exportAnnotatedPdf = async function ({ view, entries, resolved, title, ma
     }
     await render(view);
     function contents(target) {
-        const e = target.entry, r = target.range;
-        return [e.operation.toUpperCase(), r ? 'Anchor: ' + r.state + (r.relocated ? ' (relocated)' : '') : '',
-            e.selection.text ? 'Selected: ' + e.selection.text : '',
+        const e = target.entry;
+        return [e.operation.toUpperCase(),
             typeof e.value === 'string' ? 'Proposed text: ' + e.value : '', e.comment || ''].filter(Boolean).join('\n\n');
     }
     for (const target of targets) {
