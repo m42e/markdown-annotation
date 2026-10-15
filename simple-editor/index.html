@@ -388,6 +388,7 @@
         <button id="btnOpenMd">Open .md</button>
         <button id="btnOpenSidecar">Open .annotations</button>
         <button id="btnSaveMd" class="primary">Save .md (embedded)</button>
+        <button id="btnSavePdf">Download annotated PDF</button>
         <button id="btnSaveSidecar">Save .annotations</button>
         <button id="btnClearStore">Reset storage</button>
         <label style="margin:0"><input type="checkbox" id="showDeleted"> show deleted</label>
@@ -463,6 +464,10 @@ confirmation. This will be adressed in the next release.
 </script>
 
     <script src="lib/mermaid.min.js"></script>
+    <script src="lib/pdf-lib.min.js"></script>
+    <script src="lib/fontkit.umd.js"></script>
+    <script src="lib/pdf-font.js"></script>
+    <script src="pdf-export.js"></script>
     <script>
         'use strict';
 
@@ -1342,6 +1347,25 @@ confirmation. This will be adressed in the next release.
         document.getElementById('btnSaveMd').onclick = () => {
             state.payload.updatedAt = nowIso();
             download(state.docName, buildDocument(state.body, state.payload), 'text/markdown');
+        };
+
+        document.getElementById('btnSavePdf').onclick = async ev => {
+            const button = ev.currentTarget;
+            button.disabled = true;
+            setStatus('Generating PDF…');
+            try {
+                resolveAll();
+                const bytes = await exportAnnotatedPdf({
+                    view: el.view, entries: state.payload.entries.filter(e => !isDeleted(e) && !isAddressed(e)),
+                    resolved: state.resolved, title: state.docName
+                });
+                download(state.docName.replace(/\.(md|mdx)$/i, '') + '.annotated.pdf', bytes, 'application/pdf');
+                setStatus('Annotated PDF downloaded.');
+            } catch (err) {
+                setStatus('PDF export failed: ' + err.message, true);
+            } finally {
+                button.disabled = false;
+            }
         };
 
         document.getElementById('btnSaveSidecar').onclick = () => {

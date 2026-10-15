@@ -37,6 +37,24 @@ To review your own file, drag a `.md` or `.mdx` onto the page. Drag a
 browser local storage, so a reload won't lose it; **Reset storage** clears it and
 brings back the sample.
 
+## Export an annotated PDF
+
+Click **Download annotated PDF** to save a PDF with selectable text and native
+highlight annotations containing comments and proposed edits. Open the PDF in a
+reader with annotation support to inspect the comments. Open entries are included;
+addressed and deleted entries are excluded. Unmatched, ambiguous, and otherwise
+unrendered selections are listed in an appendix. Fuzzy anchors are labeled for review.
+
+Export works offline, including when opening the editor directly from disk. PDF-lib
+1.17.1, fontkit 1.1.1, and Noto Sans are bundled locally in `simple-editor/lib/`;
+no CDN or upload is used. The PDF uses a separate text layout: tables become text
+rows, Mermaid diagrams export as source, and inline bold/italic styles are not
+preserved. Noto Sans covers common Latin, Greek, and Cyrillic text; unsupported
+glyphs appear as `?` in page text (native comment contents retain Unicode).
+
+PDF export regression checks use a test-only `jsdom` installation: run
+`node tests/test_pdf_export.cjs` with `jsdom` available on Node’s module path.
+
 ## The four things you can say
 
 | Operation | Means | Changes the document? |
