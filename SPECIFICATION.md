@@ -13,7 +13,8 @@ This specification defines:
 
 - the two supported physical locations for the payload;
 - how an implementation discovers the payload for a Markdown or MDX document;
-- how embedded payloads are delimited and extracted; and
+- how embedded payloads are delimited and extracted;
+- how an optional PDF package carries and restores an annotated Document; and
 - how implementations handle duplicate, invalid, and missing payloads.
 
 The physical location of the payload is a storage concern. It is not a field in
@@ -217,6 +218,108 @@ line endings equivalently; payload extraction preserves the original body
 bytes. The exact opener, separator context, and final-content requirement keep
 ordinary fenced code examples elsewhere in the Document from being treated as
 annotation metadata.
+
+### 4.3 PDF package (optional)
+
+PDF packaging is an OPTIONAL transport for an annotated Document. It does not
+introduce a third annotation payload representation: the PDF carries a complete
+Document using the embedded-block representation from section 4.2. Consumers
+that do not support PDF import or export MAY still conform to this specification.
+The requirements in this section apply when implementing this PDF profile.
+
+#### 4.3.1 Embedding the annotated Markdown
+
+A PDF exporter MUST attach exactly one source Document with a `.md` or `.mdx`
+filename. The attachment MUST contain the complete UTF-8 Markdown or MDX source,
+followed by the separator and final `json:annotation` block defined in section
+4.2. The exporter MUST embed the complete payload, including all entries,
+addressed and deleted entries, event history, and preserved unknown properties.
+Filtering entries for visible PDF comments MUST NOT filter the attached payload.
+Export MUST NOT mark entries addressed or deleted merely because they were
+rendered, omitted, or could not be anchored in the PDF.
+
+The source MUST be stored as a PDF embedded-file stream, referenced through a
+file specification in the document catalog's `/Names` → `/EmbeddedFiles` name
+tree. A file specification MUST provide `/F` and SHOULD provide `/UF` for the
+source filename. Its `/EF` dictionary MUST reference the embedded stream through
+`/F`; if `/UF` is provided in `/EF`, it MUST reference the same source bytes.
+The embedded stream MUST declare the MIME type `text/markdown` (encoded as a PDF
+name, for example `/text#2Fmarkdown`). The file specification SHOULD use
+`/AFRelationship /Source`; exporters MAY also associate it with the document
+through the catalog's `/AF` array. An `/AF` association alone does not replace
+the required `EmbeddedFiles` name-tree entry.
+
+The attachment filename SHOULD preserve the original Document's basename and
+extension, for example `review.md` inside `review.annotated.pdf`. It MUST NOT
+require a filesystem path to recover the Document. A description such as
+`Editable Markdown source with annotations` is RECOMMENDED. A separate JSON
+attachment, PDF metadata string, page text, or native PDF comment MUST NOT
+substitute for the complete annotated Markdown attachment.
+
+For example, the decoded bytes of the `review.md` attachment are:
+
+````markdown
+# Review
+
+Text to review.
+
+---
+```json:annotation
+{
+  "$schema": "urn:markdown-annotation:document-comments:2.0.0",
+  "schemaVersion": "2.0.0",
+  "createdAt": "2026-10-15T12:00:00Z",
+  "updatedAt": "2026-10-15T12:00:00Z",
+  "entries": []
+}
+```
+````
+
+The two line endings before `---` are the framing required by section 4.2;
+any trailing line endings in the original source must additionally be preserved.
+
+#### 4.3.2 Loading a PDF package
+
+A PDF importer MUST inspect the `EmbeddedFiles` name tree, including nested
+`/Kids` nodes, to locate source attachments. It MUST support `.md` and `.mdx`
+filename extensions case-insensitively, prefer `/UF` over `/F` when available,
+and decode the referenced embedded-file stream before decoding its bytes as
+UTF-8. Invalid UTF-8 MUST be reported rather than silently replaced. Attachment
+filenames MUST be treated as names, not instructions to write to filesystem
+paths; an importer SHOULD retain only the basename for subsequent saves.
+
+After extraction, the importer MUST apply the ordinary embedded-block
+recognition, payload parsing, and validation rules to the attached Document.
+An invalid recognized embedded payload MUST NOT trigger a fallback to page
+text, native comments, or another payload. An attachment without a recognized
+embedded block MAY be opened as an unannotated Document, but is not an annotated
+PDF package conforming to section 4.3.1.
+
+The importer MUST report a missing Markdown attachment, unreadable PDF,
+unreadable attachment, or invalid selected payload. A failed load MUST leave
+the previously open Document and payload unchanged. If multiple Markdown
+attachments exist, the importer SHOULD request an explicit source selection or
+report ambiguity; it MUST NOT merge their Documents or payloads. Such a PDF is
+outside the single-source export profile defined above.
+
+The extracted source and embedded payload are authoritative for continued
+Markdown review. PDF page text and native PDF annotations are presentation
+copies; an importer MUST NOT infer Markdown edits or annotation events from
+them. Changes to comments made in another PDF reader therefore do not change
+the embedded annotation history. Supporting that synchronization would require
+a separately defined import protocol.
+
+#### 4.3.3 Simple editor behavior (informative)
+
+The bundled editor exports the current source and full embedded payload as a
+`text/markdown` attachment with the source filename and `/AFRelationship /Source`.
+Only open entries become visible native PDF comments; unrendered anchors are
+listed in an appendix. **Open .md / PDF** and drag-and-drop both restore the
+source attachment through the normal Markdown loader, locally and offline.
+The loader uses the first readable `.md` or `.mdx` attachment encountered in the
+name tree rather than offering a multiple-source chooser. Use a single Markdown
+attachment for predictable reopening. The editor's general conformance limits
+listed in the README also apply to payloads loaded from PDFs.
 
 ## 5. Payload discovery algorithm
 

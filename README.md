@@ -33,7 +33,8 @@ review, not unattended application of text edits.
 4. Click **Save .md (embedded)** to download the document with your annotations
    appended, or **Save .annotations** for a separate file.
 
-To review your own file, drag a `.md` or `.mdx` onto the page. Drag a
+To review your own file, use **Open .md / PDF** or drag a `.md`, `.mdx`, or
+previously exported `.pdf` onto the page. Drag a
 `.annotations` file on top of it to load existing feedback. Your work is kept in
 browser local storage, so a reload won't lose it; **Reset storage** clears it and
 brings back the sample.
@@ -46,10 +47,32 @@ reader with annotation support to inspect the comments. Open entries are include
 addressed and deleted entries are excluded. Unmatched, ambiguous, and otherwise
 unrendered selections are listed in an appendix. Fuzzy anchors are labeled for review.
 
-The PDF also contains the Markdown source and complete annotation payload as an
-attachment. Use **Open .md / PDF** or drop the PDF into the editor to restore it.
+The PDF also contains one editable `.md` or `.mdx` attachment: the Markdown
+source followed by the embedded `json:annotation` block. This attachment keeps
+the complete payload, including addressed and deleted entries and their event
+history, even though those entries are excluded from visible PDF comments.
+See [the PDF packaging specification](SPECIFICATION.md#43-pdf-package-optional)
+for the attachment contract.
+
+### Open an annotated PDF
+
+Use **Open .md / PDF** and select the PDF, or drop it onto the editor. The editor
+extracts its attached Markdown and loads it just like a `.md` or `.mdx` file:
+the source becomes the document, the embedded payload restores the annotations,
+and the attachment filename becomes the document name for later saves. You can
+continue reviewing and download updated Markdown, a sidecar, or a new PDF.
+Loading and extraction happen locally and work offline.
+
+This loads the source attachment; it does not convert PDF page text into
+Markdown or import changes made to native PDF comments in another reader.
 PDFs without an attached `.md` or `.mdx` file cannot be reopened as Markdown.
-Changes made to native PDF comments in another reader are not imported.
+Unreadable PDFs, invalid UTF-8 attachments, and invalid embedded payloads report
+an error instead of replacing the current document. A Markdown attachment with
+no embedded payload opens without annotations.
+
+The current editor searches the PDF's `EmbeddedFiles` name tree, including
+nested trees, and uses the first readable Markdown attachment it encounters.
+For reliable round trips, keep exactly one Markdown attachment in the PDF.
 
 Export works offline, including when opening the editor directly from disk. PDF-lib
 1.17.1, fontkit 1.1.1, and Noto Sans are bundled locally in `simple-editor/lib/`;
