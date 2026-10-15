@@ -12,6 +12,8 @@ const entries = [{id:'one',operation:'reword',selection:{text:'Long passage'},va
 const bytes = await w.exportAnnotatedPdf({view,entries,resolved:new Map([['one',{state:'exact',start:20,end:6000}],['two',{state:'unmatched'}]]),title:'Test'});
 if (process.env.PDF_TEST_OUTPUT) fs.writeFileSync(process.env.PDF_TEST_OUTPUT, bytes);
 const d = await w.PDFLib.PDFDocument.load(bytes);
+if (d.getCreator() !== 'Markdown Annotator (https://m42e.de/markdown-annotation/)')
+ throw Error('PDF creator metadata must include the annotator homepage');
 let annotations=0;
 for(const p of d.getPages()){
  const a=p.node.Annots(); if(!a)continue;

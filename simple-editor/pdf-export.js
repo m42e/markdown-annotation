@@ -14,7 +14,7 @@ window.exportAnnotatedPdf = async function ({ view, entries, resolved, title }) 
     }
     const font = fonts.regular;
     doc.setTitle(title);
-    doc.setCreator('Markdown Annotator');
+    doc.setCreator('Markdown Annotator (https://m42e.de/markdown-annotation/)');
     const supported = new Map(Object.entries(fonts).map(([key, f]) => [key, new Set(f.getCharacterSet())]));
     const margin = 48, width = 595.28, height = 841.89, bodyWidth = width - margin * 2;
     const ink = rgb(.12, .14, .16), border = rgb(.78, .81, .84);
