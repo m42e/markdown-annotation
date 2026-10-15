@@ -47,13 +47,26 @@ unrendered selections are listed in an appendix. Fuzzy anchors are labeled for r
 
 Export works offline, including when opening the editor directly from disk. PDF-lib
 1.17.1, fontkit 1.1.1, and Noto Sans are bundled locally in `simple-editor/lib/`;
-no CDN or upload is used. The PDF uses a separate text layout: tables become text
-rows, Mermaid diagrams export as source, and inline bold/italic styles are not
-preserved. Noto Sans covers common Latin, Greek, and Cyrillic text; unsupported
-glyphs appear as `?` in page text (native comment contents retain Unicode).
+no CDN or upload is used. The locally bundled Noto Sans and Noto Sans Mono fonts
+preserve bold, italic, and code formatting. The export includes bordered tables
+with wrapped cells, column alignment, and repeated headers across pages; oversized
+rows split across pages. Lists, blockquotes, rules, and clickable links are preserved.
+Mermaid diagrams export as images, with source included when it has annotations
+or when image rendering fails. Native highlights stay attached to laid-out text,
+including table cells and repeated headers.
+
+The PDF uses its own page layout rather than copying browser CSS. Images in Markdown
+remain alt text, matching the editor. Noto fonts cover common Latin, Greek, and
+Cyrillic text; unsupported glyphs appear as `?` in page text (native comment contents
+retain Unicode).
 
 PDF export regression checks use a test-only `jsdom` installation: run
 `node tests/test_pdf_export.cjs` with `jsdom` available on Node’s module path.
+The optional `node tests/test_pdf_export_browser.cjs` integration check requires
+`playwright-core` and Chromium; set `PDF_TEST_BROWSER` to the browser executable.
+It tests the actual download from `file://`, diagram rendering, source fallback,
+and native annotations with no network requests. `PDF_TEST_OUTPUT` optionally
+keeps the generated PDF for visual inspection.
 
 ## The four things you can say
 

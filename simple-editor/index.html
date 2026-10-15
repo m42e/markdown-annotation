@@ -467,6 +467,7 @@ confirmation. This will be adressed in the next release.
     <script src="lib/pdf-lib.min.js"></script>
     <script src="lib/fontkit.umd.js"></script>
     <script src="lib/pdf-font.js"></script>
+    <script src="lib/pdf-font-styles.js"></script>
     <script src="pdf-export.js"></script>
     <script>
         'use strict';
@@ -958,7 +959,7 @@ confirmation. This will be adressed in the next release.
             resolveAll();
             paintHighlights();
             renderList();
-            renderDiagrams();
+            state.diagramsReady = renderDiagrams();
             el.count.textContent = String(state.payload.entries.filter(e => !isDeleted(e)).length);
             el.docName.textContent = state.docName;
         }
@@ -1354,9 +1355,10 @@ confirmation. This will be adressed in the next release.
             button.disabled = true;
             setStatus('Generating PDF…');
             try {
+                await state.diagramsReady;
                 resolveAll();
                 const bytes = await exportAnnotatedPdf({
-                    view: el.view, entries: state.payload.entries.filter(e => !isDeleted(e) && !isAddressed(e)),
+                    view: el.view.cloneNode(true), entries: state.payload.entries.filter(e => !isDeleted(e) && !isAddressed(e)),
                     resolved: state.resolved, title: state.docName
                 });
                 download(state.docName.replace(/\.(md|mdx)$/i, '') + '.annotated.pdf', bytes, 'application/pdf');
