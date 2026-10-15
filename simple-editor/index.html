@@ -29,6 +29,26 @@
             background: var(--bg);
         }
 
+        .github-ribbon {
+            display: block;
+            padding: 6px 12px;
+            background: #24292f;
+            color: #fff;
+            text-align: center;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .github-ribbon:hover {
+            background: #32383f;
+            text-decoration: underline;
+        }
+
+        .github-ribbon:focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: -3px;
+        }
+
         header {
             display: flex;
             gap: 8px;
@@ -382,6 +402,7 @@
 </head>
 
 <body>
+    <a class="github-ribbon" href="https://github.com/m42e/markdown-annotation" target="_blank" rel="noopener noreferrer" aria-label="View markdown-annotation on GitHub (opens in a new tab)">View on GitHub <span aria-hidden="true">&nearr;</span></a>
     <header>
         <span class="title">Markdown Annotator</span>
         <span class="doc-name" id="docName">sample.md</span>
