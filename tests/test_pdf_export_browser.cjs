@@ -7,6 +7,12 @@ const path = require('path');
     const browser = await chromium.launch({ executablePath: process.env.PDF_TEST_BROWSER, headless: true });
     try {
         const page = await browser.newPage({ acceptDownloads: true });
+        // Simulate the cached export-only script from before PDF reopening existed.
+        // The editor must request the versioned script to pick up the importer.
+        await page.route('**/pdf-export.js', route => route.fulfill({
+            contentType: 'application/javascript',
+            body: 'window.exportAnnotatedPdf = async () => { throw new Error("Stale PDF script"); };'
+        }));
         const errors = [], requests = [];
         page.on('pageerror', e => errors.push(e.message));
         page.on('request', req => { if (/^https?:/.test(req.url())) requests.push(req.url()); });
