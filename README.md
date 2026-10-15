@@ -26,7 +26,8 @@ review, not unattended application of text edits.
 
 1. Open [simple-editor/index.html](simple-editor/index.html) in a browser
    (double-click it, or drag it onto a browser window).
-2. A sample document loads. Select any text in the rendered view.
+2. On first use, the bundled [example/sample.md](example/sample.md) loads with
+   example comments and suggested edits. Select any text in the rendered view.
 3. A small popup appears: **Comment**, **Reword**, **Add**, **Delete**. Pick one,
    fill in the form on the right, save the annotation.
 4. Click **Save .md (embedded)** to download the document with your annotations
